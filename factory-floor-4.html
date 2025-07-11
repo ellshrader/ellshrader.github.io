@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factory Floor 4 - Circuit Assembly</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #d1d5db;
+            overflow: hidden;
+            image-rendering: pixelated;
+        }
+        .game-container-wrapper {
+            width: 100%; height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 1rem;
+        }
+        .game-container {
+            width: 100%; max-width: 1000px; text-align: center; margin-bottom: 1rem;
+        }
+        canvas {
+            border: 2px solid #16a34a; /* Green theme for assembly floor */
+            border-radius: 0.5rem; background-color: #1f2937;
+            width: 100%; height: auto; max-height: 80vh;
+        }
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: flex;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal-content {
+            background-color: #1f2937; padding: 1.5rem; border-radius: 0.5rem;
+            border: 1px solid #16a34a; color: #d1d5db; max-width: 95%;
+            width: 900px; text-align: center;
+        }
+        .circuit-bg { background-color: #1e293b; }
+        .bit-display {
+            width: 60px; height: 60px; border-radius: 0.5rem; border: 4px solid #475569;
+            font-family: 'Roboto Mono', monospace; font-size: 2rem; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .bit-display.input.off { background-color: #475569; color: #f43f5e; }
+        .bit-display.input.on { background-color: #1e293b; color: #4ade80; border-color: #4ade80; }
+        .output-indicator {
+            padding: 0.5rem 1rem; border-radius: 0.5rem; font-family: 'Roboto Mono', monospace;
+            font-weight: bold; transition: all 0.3s;
+        }
+        .output-indicator.off { background-color: #b91c1c; color: #fecaca; }
+        .output-indicator.on { background-color: #166534; color: #dcfce7; }
+        .circuit-line { stroke: #475569; stroke-width: 8; stroke-linecap: round; transition: stroke 0.3s; }
+        .circuit-line.powered { stroke: #4ade80; }
+        .circuit-text { font-family: 'Roboto Mono', monospace; fill: #94a3b8; font-size: 14px; }
+        .draggable-part { cursor: grab; }
+        .draggable-part.dragging { cursor: grabbing; transform: scale(1.1); opacity: 0.7; position: absolute; z-index: 1000; }
+        .drop-zone { fill: rgba(22, 163, 74, 0.3); stroke: #16a34a; stroke-width: 2; stroke-dasharray: 4; transition: fill 0.2s; }
+        .placed-gate-bg { fill: #1e293b; }
+        .gate-symbol { stroke: #cbd5e1; stroke-width: 6; fill: none; }
+        .gate-label {
+            font-family: 'Roboto Mono', monospace;
+            fill: #e5e7eb;
+            font-size: 18px;
+            font-weight: bold;
+            text-anchor: middle;
+            user-select: none;
+        }
+        .problem-text {
+            border-left: 4px solid #16a34a;
+            padding-left: 1rem;
+            background-color: rgba(22, 163, 74, 0.1);
+        }
+        .discovery-text {
+            border-left: 4px solid #a855f7;
+            padding-left: 1rem;
+            background-color: rgba(168, 85, 247, 0.1);
+        }
+        .pre-built-gate { opacity: 0.6; }
+        .stairs-button {
+            background-color: #16a34a;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            border: none;
+            font-weight: bold;
+        }
+        .stairs-button:hover { background-color: #22c55e; }
+        .stairs-button.cancel { background-color: #6b7280; }
+        .stairs-button.cancel:hover { background-color: #7f8794; }
+    </style>
+</head>
+<body class="bg-slate-900">
+
+    <div class="game-container-wrapper">
+        <div class="game-container">
+            <h1 class="text-3xl font-bold text-green-500">Circuit Assembly</h1>
+            <p class="text-gray-400">Use Arrow Keys to move. Press 'E' to interact.</p>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="modal" class="modal-backdrop hidden">
+            <div id="modal-content-area" class="modal-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Game Setup ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- Asset Definitions ---
+        const TILE_SIZE = 40;
+        const PIXEL_SCALE = 4;
+        const palette = {
+            skin: '#fde68a', hair: '#4a2c2a', shirt: '#ef4444', pants: '#3b82f6',
+            floor_dark: '#052e16', floor_light: '#064e3b', platform: '#374151', platform_trim: '#16a34a',
+            station_base: '#14532d', station_base_on: '#166534',
+            station_accent: '#bbf7d0',
+            foreman_hat: '#f97316', foreman_shirt: '#15803d',
+        };
+        const playerSprite = { width: 8, height: 10, data: ["00111100","01111110","00222200","00333300","03333330","00333300","00400400","00400400","04400440","04400440"], colors: [null, palette.hair, palette.skin, palette.shirt, palette.pants] };
+        const foremanSvg = `<svg class="foreman-sprite" viewBox="0 0 16 16" style="width:64px; height:64px; margin-right: 1rem; flex-shrink:0;"><path fill="${palette.skin}" d="M5,6h6v5H5V6z"/><path fill="${palette.foreman_hat}" d="M4,4h8v2H4V4z"/><path fill="${palette.foreman_shirt}" d="M4,11h8v3H4V11z"/><path fill="#000" d="M6,7h1v1H6V7zm3,0h1v1H9V7z"/></svg>`;
+        const stationSprite = { width: 12, height: 10, data: ["001111111100","012222222210","122222222221","122111111221","122103300121","122103030121","122111111221","122222222221","012222222210","001111111100"], colors: [null, palette.station_base, palette.station_base_on, palette.station_accent] };
+
+        // --- Game State ---
+        const player = { x: 120, y: 50, width: playerSprite.width * PIXEL_SCALE, height: playerSprite.height * PIXEL_SCALE, speed: 4 };
+        const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+        let worldObjects = [];
+        const puzzleSequence = ['nor_gate', 'xor_top_arm', 'xor_bottom_arm', 'xor_final_assembly', 'xnor_gate'];
+        let currentPuzzleIndex = 0;
+        let floorIsComplete = false;
+        const puzzleState = {
+            'nor_gate': { name: 'NOR Gate', completed: false, title: 'Assemble: NOR Gate', problem: "A NOR gate is the opposite of an OR gate. It should only be ON when <strong>both</strong> inputs are OFF. Build it using an OR gate and a NOT gate.", discovery: "You've built a <strong>NOR gate</strong> (NOT-OR)! It's exactly what it sounds like: an OR gate followed by a NOT gate. This is another universal gate, just like NAND.", correctBuild: { 'build-zone-0': 'or', 'build-zone-1': 'not' }, outputText: ['OUTPUT: OFF', 'OUTPUT: ON'] },
+            'xor_top_arm': { name: 'Top Circuit', completed: false, title: 'Assemble: XOR Circuit (Part 1)', problem: "Let's build a complex gate in pieces. This first circuit needs to be ON only when <strong>A is OFF and B is ON</strong>. This is the logic: <code>(NOT A) AND B</code>.", correctBuild: { 'build-zone-0': 'not', 'build-zone-1': 'and' }, outputText: ['OUTPUT: OFF', 'OUTPUT: ON'] },
+            'xor_bottom_arm': { name: 'Bottom Circuit', completed: false, title: 'Assemble: XOR Circuit (Part 2)', problem: "Great! Now for the second piece. This circuit needs to be ON only when <strong>A is ON and B is OFF</strong>. The logic is: <code>A AND (NOT B)</code>.", correctBuild: { 'build-zone-0': 'and', 'build-zone-1': 'not' }, outputText: ['OUTPUT: OFF', 'OUTPUT: ON'] },
+            'xor_final_assembly': { name: 'XOR Gate', completed: false, title: 'Assemble: Final XOR Gate', problem: "You've built the two conditional circuits. Now combine them! The final output should be ON if the <strong>top circuit is ON OR the bottom circuit is ON</strong>. Just add the final gate!", discovery: "Amazing! You built an <strong>XOR gate</strong>. It's crucial for arithmetic and checking if two values are different. By building it in pieces, you can see exactly how it works.", correctBuild: { 'build-zone-0': 'or' }, outputText: ['OUTPUT: OFF', 'OUTPUT: ON'] },
+            'xnor_gate': { name: 'XNOR Gate', completed: false, title: 'Assemble: XNOR Gate', problem: "The final assembly! An XNOR (Exclusive NOR) gate is the opposite of XOR. It's ON only when the inputs are the <strong>same</strong>. You've already built an XOR gate, so just add a NOT gate to the end to invert its output!", discovery: "Incredible work! You've constructed an <strong>XNOR gate</strong>. It's often called an 'equivalence gate' because it checks if two inputs are the same. You've now built all the fundamental compound gates!", correctBuild: { 'build-zone-0': 'not' }, outputText: ['OUTPUT: OFF', 'OUTPUT: ON'] },
+        };
+
+        // --- SCRIPT FOR LEVEL TRANSITION ---
+        const stairsSprite = {
+            width: 12, height: 10, data: [
+                "000000000011", "000000000111", "000000001110", "000000011100",
+                "000000111000", "000001110000", "000011100000", "000111000000",
+                "001110000000", "011100000000"
+            ],
+            colors: [null, '#a16207']
+        };
+        // --- END SCRIPT FOR LEVEL TRANSITION ---
+
+        // --- World Initialization ---
+        function initializeWorld() {
+            const gameContainer = document.querySelector('.game-container');
+            canvas.width = gameContainer.offsetWidth;
+            canvas.height = window.innerHeight * 0.75;
+            ctx.imageSmoothingEnabled = false;
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            player.x = centerX - player.width / 2;
+            player.y = canvas.height - player.height - 40;
+
+            const stationSpacing = (canvas.width - 200) / puzzleSequence.length;
+
+            worldObjects = puzzleSequence.map((id, index) => {
+                const stationX = 100 + (stationSpacing * index) + (stationSpacing/2);
+                const stationY = centerY;
+                return {
+                    type: 'station', id, name: puzzleState[id].name,
+                    x: stationX - (stationSprite.width * PIXEL_SCALE / 2), y: stationY - (stationSprite.height * PIXEL_SCALE / 2),
+                    width: stationSprite.width * PIXEL_SCALE, height: stationSprite.height * PIXEL_SCALE,
+                    sprite: stationSprite, onColor: stationSprite.colors[2], color: stationSprite.colors[1]
+                };
+            });
+
+            // Add stairs object
+            worldObjects.push({
+                type: 'stairs', id: 'stairs_down', direction: 'down',
+                name: 'Stairs Down', nextFloor: 'factory-floor-3.html',
+                x: 20,
+                y: canvas.height - (stairsSprite.height * PIXEL_SCALE) - 20,
+                width: stairsSprite.width * PIXEL_SCALE, height: stairsSprite.height * PIXEL_SCALE,
+                sprite: stairsSprite
+            });
+        }
+
+        // --- Modal & Puzzle Logic ---
+        const modal = document.getElementById('modal');
+        const modalContentArea = document.getElementById('modal-content-area');
+        function showModal(content) { modalContentArea.innerHTML = content; modal.classList.remove('hidden'); }
+        function closeModal() { modal.classList.add('hidden'); modalContentArea.innerHTML = ''; }
+        function showMessage(title, text, onCloseCallback) {
+            showModal(`<div class="p-4"><div class="flex items-center mb-4">${foremanSvg}<div><h2 class="text-2xl font-bold text-left">${title}</h2><p class="text-left">${text}</p></div></div><button id="puzzle-close" class="mt-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">OK</button></div>`);
+            document.getElementById('puzzle-close').addEventListener('click', () => { closeModal(); if (onCloseCallback) onCloseCallback(); });
+        }
+        
+        function launchStairsModal(stair) {
+            let buttonsHtml = `<button class="stairs-button" onclick="window.location.href='${stair.nextFloor}'">Go Down to Floor 3</button>`;
+            buttonsHtml += `<button class="stairs-button cancel" onclick="closeModal()">Stay Here</button>`;
+
+            showModal(`<div class="puzzle-container">
+                <h2 class="text-2xl font-bold text-yellow-300 mb-4">Stairs</h2>
+                <div>${buttonsHtml}</div>
+            </div>`);
+        }
+
+        function completePuzzle(stationId) {
+            const pz = puzzleState[stationId];
+            if (pz && !pz.completed) {
+                pz.completed = true;
+                if (puzzleSequence[currentPuzzleIndex] === stationId) {
+                    currentPuzzleIndex++;
+                }
+            }
+            if (currentPuzzleIndex >= puzzleSequence.length && !floorIsComplete) {
+                floorIsComplete = true;
+                setTimeout(() => {
+                    showMessage("All Floors Complete!", "Incredible! You're a natural at circuit design. You've passed with flying colors! Thanks for all your help.");
+                }, 500);
+            }
+        }
+
+        // --- Puzzle Templates ---
+        const gateSymbols = {
+            not: `<g><rect class="placed-gate-bg" width="100" height="70" rx="5" /><path class="gate-symbol" d="M15 5 L 75 35 L 15 65 Z" /><circle class="gate-symbol" cx="85" cy="35" r="8" /></g>`,
+            and: `<g><rect class="placed-gate-bg" width="100" height="70" rx="5" /><path class="gate-symbol" d="M15 10 H 50 C 85 10, 85 60, 50 60 H 15 Z" /></g>`,
+            or: `<g><rect class="placed-gate-bg" width="100" height="70" rx="5" /><path class="gate-symbol" d="M15 10 Q 35 35, 15 60 C 35 60, 85 50, 85 35 C 85 20, 35 10, 15 10 Z" /></g>`,
+        };
+
+        const schematics = {
+            nor_gate: `<svg viewBox="0 0 500 150" class="w-full">
+                 <text x="10" y="45" class="circuit-text">A</text><path id="line-in-a" d="M25 45 H 100" class="circuit-line" />
+                 <text x="10" y="105" class="circuit-text">B</text><path id="line-in-b" d="M25 105 H 100" class="circuit-line" />
+                 <rect x="100" y="20" width="275" height="110" rx="5" fill="none" stroke="#475569" stroke-dasharray="4"/>
+                 <text x="237.5" y="15" class="circuit-text" text-anchor="middle">Build Area</text>
+                 <g transform="translate(120, 40)"><rect id="build-zone-0" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-0" style="visibility: hidden;"></g></g>
+                 <path id="line-mid" class="circuit-line" d="M220 75 H 255" />
+                 <g transform="translate(255, 40)"><rect id="build-zone-1" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-1" style="visibility: hidden;"></g></g>
+                <path id="line-out" class="circuit-line" d="M375 75 H 475" />
+            </svg>`,
+            xor_top_arm: `<svg viewBox="0 0 500 150" class="w-full">
+                <text x="10" y="45" class="circuit-text">A</text><path id="line-in-a" class="circuit-line" d="M25 45 H 100" />
+                <text x="10" y="105" class="circuit-text">B</text><path id="line-in-b" class="circuit-line" d="M25 105 H 250" />
+                <rect x="100" y="20" width="275" height="110" rx="5" fill="none" stroke="#475569" stroke-dasharray="4"/>
+                <g transform="translate(100, 20)"><rect id="build-zone-0" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-0" style="visibility: hidden;"></g></g>
+                <path id="line-mid" class="circuit-line" d="M200 55 H 250" />
+                <g transform="translate(250, 40)"><rect id="build-zone-1" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-1" style="visibility: hidden;"></g></g>
+                <path id="line-out" class="circuit-line" d="M350 75 H 475" />
+            </svg>`,
+            xor_bottom_arm: `<svg viewBox="0 0 500 150" class="w-full">
+                <text x="10" y="45" class="circuit-text">A</text><path id="line-in-a" class="circuit-line" d="M25 45 H 250" />
+                <text x="10" y="105" class="circuit-text">B</text><path id="line-in-b" class="circuit-line" d="M25 105 H 100" />
+                <rect x="100" y="20" width="275" height="110" rx="5" fill="none" stroke="#475569" stroke-dasharray="4"/>
+                <g transform="translate(100, 70)"><rect id="build-zone-1" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-1" style="visibility: hidden;"></g></g>
+                <path id="line-mid" class="circuit-line" d="M200 105 H 250" />
+                <g transform="translate(250, 40)"><rect id="build-zone-0" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-0" style="visibility: hidden;"></g></g>
+                <path id="line-out" class="circuit-line" d="M350 75 H 475" />
+            </svg>`,
+            xor_final_assembly: `<svg viewBox="0 0 700 300" class="w-full">
+                <text x="10" y="65" class="circuit-text">A</text><path class="circuit-line line-in-a" d="M25 65 H 75" />
+                <text x="10" y="235" class="circuit-text">B</text><path class="circuit-line line-in-b" d="M25 235 H 75" />
+                <!-- Top Pre-built Arm -->
+                <g class="pre-built-gate">
+                    <rect x="75" y="30" width="300" height="70" rx="5" fill="#1f2937" stroke="#475569" />
+                    <text fill="#9ca3af" x="225" y="25" font-size="12" text-anchor="middle">(NOT A) AND B Circuit</text>
+                    <path class="circuit-line line-in-a" d="M75 65 H 100" /><g transform="translate(100, 30)">${gateSymbols.not}</g>
+                    <path id="line-top-mid" class="circuit-line" d="M200 65 H 225" />
+                    <path class="circuit-line line-in-b" d="M75 80 H 225" />
+                    <g transform="translate(225, 30)">${gateSymbols.and}</g>
+                </g>
+                <path id="line-top-out" class="circuit-line" d="M325 65 H 450" />
+                <!-- Bottom Pre-built Arm -->
+                <g class="pre-built-gate">
+                    <rect x="75" y="200" width="300" height="70" rx="5" fill="#1f2937" stroke="#475569" />
+                    <text fill="#9ca3af" x="225" y="195" font-size="12" text-anchor="middle">A AND (NOT B) Circuit</text>
+                    <path class="circuit-line line-in-a" d="M75 220 H 225" />
+                    <path class="circuit-line line-in-b" d="M75 235 H 100" /><g transform="translate(100, 200)">${gateSymbols.not}</g>
+                    <path id="line-bottom-mid" class="circuit-line" d="M200 235 H 225" />
+                    <g transform="translate(225, 200)">${gateSymbols.and}</g>
+                </g>
+                <path id="line-bottom-out" class="circuit-line" d="M325 235 H 450" />
+                <!-- Final OR Gate -->
+                <path id="line-top-to-or" class="circuit-line" d="M450 65 V 130 H 500" />
+                <path id="line-bottom-to-or" class="circuit-line" d="M450 235 V 170 H 500" />
+                <g transform="translate(500, 115)"><rect id="build-zone-0" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-0" style="visibility: hidden;"></g></g>
+                <path id="line-out" class="circuit-line" d="M600 150 H 675" />
+            </svg>`,
+            xnor_gate: `<svg viewBox="0 0 800 300" class="w-full">
+                 <text x="10" y="65" class="circuit-text">A</text><path class="circuit-line line-in-a" d="M25 65 H 75" />
+                <text x="10" y="235" class="circuit-text">B</text><path class="circuit-line line-in-b" d="M25 235 H 75" />
+                <!-- Pre-built XOR Gate -->
+                <g class="pre-built-gate">
+                    <rect x="75" y="5" width="450" height="290" rx="5" fill="#1f2937" stroke="#475569" />
+                    <text fill="#9ca3af" x="300" y="25" font-size="16" text-anchor="middle">XOR Circuit</text>
+                    <path class="circuit-line line-in-a" d="M75 65 H 100" /><g transform="translate(100, 30)">${gateSymbols.not}</g>
+                    <path id="line-top-mid" class="circuit-line" d="M200 65 H 225" /><path class="circuit-line line-in-b" d="M75 80 H 225" />
+                    <g transform="translate(225, 30)">${gateSymbols.and}</g>
+                    <path id="line-top-out" class="circuit-line" d="M325 65 H 400" />
+                    <path class="circuit-line line-in-a" d="M75 220 H 225" /><path class="circuit-line line-in-b" d="M75 235 H 100" />
+                    <g transform="translate(100, 200)">${gateSymbols.not}</g>
+                    <path id="line-bottom-mid" class="circuit-line" d="M200 235 H 225" />
+                    <g transform="translate(225, 200)">${gateSymbols.and}</g>
+                    <path id="line-bottom-out" class="circuit-line" d="M325 235 H 400" />
+                    <path id="line-top-to-or" class="circuit-line" d="M400 65 V 130 H 425" />
+                    <path id="line-bottom-to-or" class="circuit-line" d="M400 235 V 170 H 425" />
+                    <g transform="translate(425, 115)">${gateSymbols.or}</g>
+                </g>
+                <path id="line-xor-out" class="circuit-line" d="M525 150 H 575" />
+                <!-- Final NOT Gate -->
+                <g transform="translate(575, 115)"><rect id="build-zone-0" class="drop-zone" width="100" height="70" rx="5" /><g id="placed-gate-build-0" style="visibility: hidden;"></g></g>
+                <path id="line-out" class="circuit-line" d="M675 150 H 775" />
+            </svg>`
+        };
+        const gatePartsSvg = {
+            not: `<div class="draggable-part" data-type="not"><svg width="90" height="50" viewBox="0 0 90 50"><g><path class="gate-symbol" d="M10 5 L 60 25 L 10 45 Z" /><circle class="gate-symbol" cx="68" cy="25" r="7" /><text x="35" y="30" class="gate-label">NOT</text></g></svg></div>`,
+            and: `<div class="draggable-part" data-type="and"><svg width="90" height="50" viewBox="0 0 90 50"><g><path class="gate-symbol" d="M10 5 H 40 C 70 5, 70 45, 40 45 H 10 Z" /><text x="35" y="30" class="gate-label">AND</text></g></svg></div>`,
+            or: `<div class="draggable-part" data-type="or"><svg width="90" height="50" viewBox="0 0 90 50"><g><path class="gate-symbol" d="M10 5 Q 30 25, 10 45 C 30 45, 70 35, 70 25 C 70 15, 30 5, 10 5 Z" /><text x="35" y="30" class="gate-label">OR</text></g></svg></div>`,
+        };
+        
+        // --- Puzzle Launcher ---
+        function launchPuzzle(stationId) {
+            const pz = puzzleState[stationId];
+            let partsBinHtml = `<div id="parts-bin" class="flex flex-col gap-4">${gatePartsSvg.and} ${gatePartsSvg.or} ${gatePartsSvg.not}</div>`;
+            let schematicHtml = schematics[stationId];
+            let inputs = [0, 0];
+            
+            const modalHtml = `
+                <div id="instruction-text" class="text-center mb-6">
+                    <h1 class="text-3xl font-bold text-white">${pz.title}</h1>
+                    <div class="problem-text text-slate-300 max-w-3xl mx-auto mt-4 p-3 rounded-md text-left">
+                        <h2 class="font-bold text-green-400">Assembly Order:</h2>
+                        <p>${pz.problem}</p>
+                    </div>
+                    <div id="discovery-text" class="hidden discovery-text text-slate-300 max-w-3xl mx-auto mt-4 p-3 rounded-md text-left"></div>
+                </div>
+                <div class="circuit-bg p-8 rounded-lg shadow-2xl">
+                    <div class="flex items-center justify-around gap-8">
+                        <div id="controls-area" class="flex flex-col items-center gap-4">
+                            ${partsBinHtml}
+                        </div>
+                        <div class="flex-grow flex flex-col items-center">
+                            <div class="flex items-center gap-6">
+                                <div id="control-switch-container">
+                                    <div class="flex flex-col items-center gap-2"><div id="control-A" class="bit-display input off">0</div><p class="text-slate-400 font-mono">Input A</p></div>
+                                    <div class="flex flex-col items-center gap-2 mt-4"><div id="control-B" class="bit-display input off">0</div><p class="text-slate-400 font-mono">Input B</p></div>
+                                </div>
+                                <div id="schematic-area" class="w-full">${schematicHtml}</div>
+                                <div id="output-indicator-container" class="flex flex-col items-center gap-2">
+                                    <div id="output-indicator" class="output-indicator off"></div>
+                                    <p class="text-slate-400 font-mono">Status</p>
+                                </div>
+                            </div>
+                            <div id="feedback-text" class="h-8 mt-4 text-xl font-bold"></div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-4">
+                        <button id="puzzle-close-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Exit</button>
+                        <button id="puzzle-complete-btn" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Complete Station</button>
+                    </div>
+                </div>`;
+            showModal(modalHtml);
+            
+            document.getElementById('puzzle-close-btn').addEventListener('click', closeModal);
+            document.getElementById('puzzle-complete-btn').addEventListener('click', () => {
+                closeModal();
+            });
+
+            let placedGates = {};
+            let puzzleSolved = false;
+
+            const updateCircuit = () => {
+                const [a, b] = inputs;
+                let outputValue = 0;
+                let isCorrectBuild = false;
+                
+                const setPower = (id, condition) => {
+                    const elements = document.querySelectorAll(`.${id}, #${id}`);
+                    elements.forEach(el => el.classList.toggle('powered', !!condition));
+                };
+                const gateLogic = (type, inA, inB) => {
+                    switch(type) {
+                        case 'and': return inA && inB;
+                        case 'or':  return inA || inB;
+                        case 'not': return !inA;
+                        default: return 0;
+                    }
+                };
+
+                const placedCount = Object.keys(placedGates).length;
+                const requiredCount = Object.keys(pz.correctBuild).length;
+                if (placedCount === requiredCount) {
+                    isCorrectBuild = Object.keys(pz.correctBuild).every(zoneId => pz.correctBuild[zoneId] === placedGates[zoneId]);
+                }
+
+                setPower('line-in-a', a);
+                setPower('line-in-b', b);
+                
+                if (stationId === 'nor_gate') {
+                    const orOut = gateLogic(placedGates['build-zone-0'], a, b);
+                    setPower('line-mid', orOut);
+                    const notOut = gateLogic(placedGates['build-zone-1'], orOut);
+                    setPower('line-out', notOut);
+                    outputValue = notOut;
+                } else if (stationId === 'xor_top_arm') {
+                    const notOut = gateLogic(placedGates['build-zone-0'], a);
+                    setPower('line-mid', notOut);
+                    const andOut = gateLogic(placedGates['build-zone-1'], notOut, b);
+                    setPower('line-out', andOut);
+                    outputValue = andOut;
+                } else if (stationId === 'xor_bottom_arm') {
+                    const notOut = gateLogic(placedGates['build-zone-1'], b);
+                    setPower('line-mid', notOut);
+                    const andOut = gateLogic(placedGates['build-zone-0'], a, notOut);
+                    setPower('line-out', andOut);
+                    outputValue = andOut;
+                } else if (stationId === 'xor_final_assembly') {
+                    const topArmNotOut = !a;
+                    setPower('line-top-mid', topArmNotOut);
+                    const topArmOut = topArmNotOut && b;
+                    setPower('line-top-out', topArmOut);
+                    setPower('line-top-to-or', topArmOut);
+
+                    const bottomArmNotOut = !b;
+                    setPower('line-bottom-mid', bottomArmNotOut);
+                    const bottomArmOut = a && bottomArmNotOut;
+                    setPower('line-bottom-out', bottomArmOut);
+                    setPower('line-bottom-to-or', bottomArmOut);
+
+                    const orOut = gateLogic(placedGates['build-zone-0'], topArmOut, bottomArmOut);
+                    setPower('line-out', orOut);
+                    outputValue = orOut;
+                } else if (stationId === 'xnor_gate') {
+                    const topArmNotOut = !a;
+                    setPower('line-top-mid', topArmNotOut);
+                    const topArmOut = topArmNotOut && b;
+                    setPower('line-top-out', topArmOut);
+                    setPower('line-top-to-or', topArmOut);
+
+                    const bottomArmNotOut = !b;
+                    setPower('line-bottom-mid', bottomArmNotOut);
+                    const bottomArmOut = a && bottomArmNotOut;
+                    setPower('line-bottom-out', bottomArmOut);
+                    setPower('line-bottom-to-or', bottomArmOut);
+
+                    const xorOut = topArmOut || bottomArmOut;
+                    setPower('line-xor-out', xorOut);
+                    const notOut = gateLogic(placedGates['build-zone-0'], xorOut);
+                    setPower('line-out', notOut);
+                    outputValue = notOut;
+                }
+
+                const outputIndicator = document.getElementById('output-indicator');
+                const [offText, onText] = pz.outputText;
+                outputIndicator.textContent = outputValue ? onText : offText;
+                outputIndicator.classList.toggle('on', !!outputValue);
+                outputIndicator.classList.toggle('off', !outputValue);
+
+                const feedback = document.getElementById('feedback-text');
+                if (isCorrectBuild && !puzzleSolved) {
+                    puzzleSolved = true;
+                    feedback.textContent = "CORRECT ASSEMBLY!";
+                    feedback.className = 'h-8 mt-4 text-xl font-bold text-green-400';
+                    completePuzzle(stationId);
+                    
+                    document.getElementById('puzzle-complete-btn').classList.remove('hidden');
+                    document.getElementById('puzzle-close-btn').textContent = "Keep Playing";
+
+                    const discoveryText = pz.discovery;
+                    if (discoveryText) {
+                        const discoveryEl = document.getElementById('discovery-text');
+                        discoveryEl.innerHTML = `<h2 class="font-bold text-purple-400">New Discovery!</h2><p>${discoveryText}</p>`;
+                        discoveryEl.classList.remove('hidden');
+                    }
+                } else if (placedCount === requiredCount && !isCorrectBuild) {
+                    feedback.textContent = "INCORRECT ASSEMBLY!";
+                    feedback.className = 'h-8 mt-4 text-xl font-bold text-red-400';
+                }
+            };
+
+            const dropHandler = (part, dropTarget) => {
+                const partType = part.dataset.type;
+                const zoneId = dropTarget.id;
+                placedGates[zoneId] = partType;
+                const zoneNumber = zoneId.split('-').pop();
+                const containerId = `placed-gate-build-${zoneNumber}`;
+                const placedGateContainer = document.getElementById(containerId);
+                if (placedGateContainer) {
+                    placedGateContainer.innerHTML = gateSymbols[partType];
+                    placedGateContainer.style.visibility = 'visible';
+                }
+                updateCircuit();
+            };
+
+            modalContentArea.querySelectorAll('.draggable-part').forEach((part) => {
+                part.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    if (puzzleSolved) return;
+                    const clone = part.cloneNode(true);
+                    clone.classList.add('dragging');
+                    document.body.appendChild(clone);
+                    const moveClone = (moveEvent) => {
+                        clone.style.left = `${moveEvent.clientX - 45}px`;
+                        clone.style.top = `${moveEvent.clientY - 25}px`;
+                    };
+                    moveClone(e);
+                    const drop = (upEvent) => {
+                        clone.remove();
+                        const dropTarget = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+                        if (dropTarget && dropTarget.classList.contains('drop-zone')) {
+                            dropHandler(part, dropTarget);
+                        }
+                        document.removeEventListener('mousemove', moveClone);
+                        document.removeEventListener('mouseup', drop, { once: true });
+                    };
+                    document.addEventListener('mousemove', moveClone);
+                    document.addEventListener('mouseup', drop, { once: true });
+                });
+            });
+
+            ['A', 'B'].forEach((char, index) => {
+                const control = document.getElementById(`control-${char}`);
+                if (control) {
+                    control.addEventListener('click', () => {
+                        inputs[index] = inputs[index] === 0 ? 1 : 0;
+                        control.textContent = inputs[index];
+                        control.classList.toggle('on');
+                        control.classList.toggle('off');
+                        updateCircuit();
+                    });
+                }
+            });
+            
+            updateCircuit();
+        }
+
+        // --- Drawing & Game Loop ---
+        function checkCollision(r1, r2) { return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x && r1.y < r2.y + r2.height && r1.y + r1.height > r2.y; }
+        function drawSprite(sprite, x, y, scale, baseColor) {
+            const colors = [...sprite.colors];
+            if (baseColor) colors[1] = baseColor;
+            for (let r = 0; r < sprite.height; r++) for (let col = 0; col < sprite.width; col++) {
+                const index = parseInt(sprite.data[r][col]);
+                if (index !== 0 && colors[index]) {
+                    ctx.fillStyle = colors[index];
+                    ctx.fillRect(x + col * scale, y + r * scale, scale, scale);
+                }
+            }
+        }
+
+        function drawWorld() {
+            for (let y = 0; y < canvas.height; y += TILE_SIZE) for (let x = 0; x < canvas.width; x += TILE_SIZE) {
+                ctx.fillStyle = ((x / TILE_SIZE) % 2 === (y / TILE_SIZE) % 2) ? palette.floor_dark : palette.floor_light;
+                ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+            }
+            
+            if (!floorIsComplete) {
+                const activeStationId = puzzleSequence[currentPuzzleIndex];
+                const activeStation = worldObjects.find(obj => obj.id === activeStationId);
+                if (activeStation) {
+                    ctx.fillStyle = 'rgba(253, 224, 71, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(activeStation.x + activeStation.width / 2, activeStation.y + activeStation.height / 2, 60, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            worldObjects.forEach(obj => {
+                if (obj.type === 'station') {
+                    const isCompleted = puzzleState[obj.id].completed;
+                    drawSprite(obj.sprite, obj.x, obj.y, PIXEL_SCALE, isCompleted ? obj.onColor : obj.color);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px "Roboto Mono"';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(obj.name, obj.x + obj.width / 2, obj.y + obj.height + 12);
+                    if (isCompleted) {
+                        ctx.fillStyle = '#4ade80';
+                        ctx.font = 'bold 24px "Roboto Mono"';
+                        ctx.fillText('✓', obj.x + obj.width / 2, obj.y - 10);
+                    }
+                } else if (obj.type === 'stairs') {
+                    drawSprite(obj.sprite, obj.x, obj.y, PIXEL_SCALE);
+                    ctx.fillStyle = (obj.direction === 'up' && floorIsComplete) || obj.direction === 'down' ? '#a3e635' : '#ffffff';
+                    ctx.font = '12px "Roboto Mono"';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(obj.name, obj.x + obj.width / 2, obj.y + obj.height + 12);
+                }
+            });
+        }
+        function update() {
+            let nextX = player.x, nextY = player.y;
+            if (keys.ArrowUp) nextY -= player.speed;
+            if (keys.ArrowDown) nextY += player.speed;
+            if (keys.ArrowLeft) nextX -= player.speed;
+            if (keys.ArrowRight) nextX += player.speed;
+            if (nextX < 0) nextX = 0;
+            if (nextX + player.width > canvas.width) nextX = canvas.width - player.width;
+            if (nextY < 0) nextY = 0;
+            if (nextY + player.height > canvas.height) nextY = canvas.height - player.height;
+            
+            player.x = nextX;
+            player.y = nextY;
+        }
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawWorld();
+            drawSprite(playerSprite, player.x, player.y, PIXEL_SCALE);
+            let interactionTarget = worldObjects.find(obj => checkCollision(player, { ...obj, x: obj.x - 10, y: obj.y - 10, width: obj.width + 20, height: obj.height + 20 }));
+            if (interactionTarget) {
+                ctx.fillStyle = 'white';
+                ctx.font = '16px "Inter"';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Press 'E' to interact with ${interactionTarget.name}`, canvas.width / 2, canvas.height - 30);
+            }
+        }
+        function gameLoop() {
+            if (modal.classList.contains('hidden')) update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        function handleInteraction(obj) {
+            if (obj.type === 'stairs') {
+                launchStairsModal(obj);
+                return;
+            }
+
+            if (obj.type === 'station') {
+                const targetStationIndex = puzzleSequence.indexOf(obj.id);
+                if (targetStationIndex > currentPuzzleIndex) {
+                    showMessage('Out of Sequence', 'This station is not active yet. Please find the highlighted station to proceed.');
+                } else {
+                    launchPuzzle(obj.id);
+                }
+            }
+        }
+        window.addEventListener('keydown', (e) => {
+            if (modal.classList.contains('hidden')) {
+                if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+                if (e.key.toLowerCase() === 'e') {
+                    const interactionTarget = worldObjects.find(obj => checkCollision(player, { ...obj, x: obj.x - 10, y: obj.y - 10, width: obj.width + 20, height: obj.height + 20 }));
+                    if(interactionTarget) handleInteraction(interactionTarget);
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+        window.addEventListener('resize', initializeWorld);
+
+        // --- Start the game! ---
+        function startGame() {
+            initializeWorld();
+            const introText = "Welcome to the Repair Bay. A few machines are on the fritz and it's your job to fix them. Walk up to a highlighted station and press 'E' to see the problem. You'll need to choose the right logic gate for the job. Good luck!";
+            showMessage("Welcome to the Repair Bay!", introText, gameLoop);
+        }
+        startGame();
+    </script>
+</body>
+</html>
+
