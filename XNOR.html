@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How a Complex XNOR Gate Works - Interactive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #d1d5db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+            touch-action: none;
+        }
+        .puzzle-container {
+            background-color: #0f172a;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid #9333ea; /* Purple border like XOR */
+            width: 95%;
+            max-width: 850px;
+            text-align: center;
+        }
+        .circuit-bg { background-color: #1e293b; }
+
+        .bit-display {
+            width: 60px; height: 60px; border-radius: 0.5rem; border: 4px solid #475569;
+            font-family: 'Roboto Mono', monospace; font-size: 1.8rem; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer; user-select: none;
+        }
+        .bit-display.input.off, .bit-display.output.off { background-color: #475569; color: #f43f5e; }
+        .bit-display.input.on, .bit-display.output.on { background-color: #1e293b; color: #4ade80; border-color: #4ade80; }
+
+        .circuit-line { stroke: #475569; stroke-width: 4; stroke-linecap: round; transition: stroke 0.2s, filter 0.2s; }
+        .circuit-line.powered { stroke: #fde047; filter: drop-shadow(0 0 3px #fde047); }
+        .junction { fill: #475569; transition: fill 0.2s; }
+        .junction.powered { fill: #fde047; }
+        
+        .gate-symbol-draggable { fill: #9333ea; }
+        .gate-text-draggable { font-size: 14px; font-weight: bold; fill: white; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+        
+        .draggable-part { cursor: grab; }
+        .draggable-part.dragging { cursor: grabbing; opacity: 0.5; }
+        .drop-zone { fill: rgba(139, 92, 246, 0.2); stroke: #a78bfa; stroke-width: 2; stroke-dasharray: 4; transition: fill 0.2s; }
+        .drop-zone.correct { fill: rgba(74, 222, 128, 0.3); stroke: #4ade80; }
+        
+        .truth-table th, .truth-table td {
+            border: 1px solid #475569; padding: 0.5rem; text-align: center;
+            font-family: 'Roboto Mono', monospace; color: #cbd5e1; font-size: 1.125rem;
+        }
+        .truth-table th { background-color: #334155; }
+        .truth-table tr.current { background-color: #334155; }
+        .truth-table tr.discovered { color: #86efac; font-weight: bold; }
+
+        .touch-drag-clone {
+            position: absolute;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0.7;
+        }
+        .placed-gate-svg {
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="puzzle-container" class="puzzle-container">
+        <!-- Content will be injected by JavaScript -->
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const puzzleState = {
+                placedGates: 0,
+                title: 'Building a Complex XNOR Gate',
+                buildText: "An XNOR gate's output is ON only if its inputs are the same. Drag gates into the slots to build the circuit. The output will update in real-time as you build and toggle the inputs!",
+                testText: "The circuit is fully assembled! Now, toggle the inputs to discover all four combinations in the truth table and complete the station.",
+                truthTable: {},
+                discoveredCombinations: new Set(),
+                isInputA_On: false,
+                isInputB_On: false,
+            };
+            
+            const gateLogic = {
+                AND: (a, b) => a && b,
+                OR: (a, b) => a || b,
+                NOT: (a) => !a,
+                EMPTY: () => false,
+            };
+
+            const gatePartsSvg = `
+                <div class="draggable-part" data-gate-type="AND" draggable="true"><svg viewBox="0 0 60 40" class="w-20 h-14"><path d="M10 5 H30 C 45 5, 45 35, 30 35 H10 Z" class="gate-symbol-draggable" /><text x="26" y="20" class="gate-text-draggable">AND</text></svg></div>
+                <div class="draggable-part" data-gate-type="OR" draggable="true"><svg viewBox="0 0 60 40" class="w-20 h-14"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-draggable"/><text x="28" y="20" class="gate-text-draggable">OR</text></svg></div>
+                <div class="draggable-part" data-gate-type="NOT" draggable="true"><svg viewBox="0 0 60 40" class="w-20 h-14"><path d="M10 5 L40 20 L10 35 Z" class="gate-symbol-draggable"/><circle cx="45" cy="20" r="4" stroke-width="2" stroke="#9333ea" fill="none"/><text x="23" y="20" class="gate-text-draggable">NOT</text></svg></div>
+            `;
+            
+            const xnorCircuitSchematic = `
+                <svg viewBox="0 0 900 450" class="w-full">
+                    <!-- INPUTS -->
+                    <foreignObject x="10" y="70" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input-a-signal" class="bit-display input off">0</div></div></foreignObject>
+                    <text x="40" y="145" class="circuit-text" text-anchor="middle">A</text>
+                    <foreignObject x="10" y="320" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input-b-signal" class="bit-display input off">0</div></div></foreignObject>
+                    <text x="40" y="395" class="circuit-text" text-anchor="middle">B</text>
+
+                    <!-- WIRING -->
+                    <path id="line-a-main" d="M70 100 h50" class="circuit-line" /><circle id="junction-a" cx="120" cy="100" r="4" class="junction" />
+                    <path id="line-a-to-and1" d="M120 100 h180" class="circuit-line" />
+                    <path id="line-a-down" d="M120 100 v175" class="circuit-line" /><circle id="junction-a2" cx="120" cy="275" r="4" class="junction" />
+                    <path id="line-a-to-not2" d="M120 275 h50" class="circuit-line" />
+                    <path id="line-b-main" d="M70 350 h50" class="circuit-line" /><circle id="junction-b" cx="120" cy="350" r="4" class="junction" />
+                    <path id="line-b-to-and2" d="M120 350 h180" class="circuit-line" />
+                    <path id="line-b-up" d="M120 350 v-175" class="circuit-line" /><circle id="junction-b2" cx="120" cy="175" r="4" class="junction" />
+                    <path id="line-b-to-not1" d="M120 175 h50" class="circuit-line" />
+                    
+                    <!-- GATE SLOTS -->
+                    <g id="slot-1" class="drop-target-group" data-expected-gate="NOT"><rect class="drop-zone" x="170" y="150" width="100" height="50" rx="5" /><g class="placed-gate-container"></g></g>
+                    <path id="line-not1-to-and1" d="M270 175 h30" class="circuit-line" />
+                    <g id="slot-2" class="drop-target-group" data-expected-gate="AND"><rect class="drop-zone" x="300" y="100" width="100" height="100" rx="5" /><g class="placed-gate-container"></g></g>
+                    <g id="slot-3" class="drop-target-group" data-expected-gate="NOT"><rect class="drop-zone" x="170" y="250" width="100" height="50" rx="5" /><g class="placed-gate-container"></g></g>
+                    <path id="line-not2-to-and2" d="M270 275 h30" class="circuit-line" />
+                    <g id="slot-4" class="drop-target-group" data-expected-gate="AND"><rect class="drop-zone" x="300" y="250" width="100" height="100" rx="5" /><g class="placed-gate-container"></g></g>
+                    <path id="line-and1-out" d="M400 150 h80" class="circuit-line" /><path id="line-and2-out" d="M400 300 h80" class="circuit-line" />
+                    <path d="M480 150 v50" class="circuit-line" /><path d="M480 300 v-50" class="circuit-line" />
+                    <g id="slot-5" class="drop-target-group" data-expected-gate="OR"><rect class="drop-zone" x="480" y="175" width="100" height="100" rx="5" /><g class="placed-gate-container"></g></g>
+                    
+                    <!-- Final NOT gate -->
+                    <path id="line-or-out" d="M580 225 h50" class="circuit-line" />
+                    <g id="slot-6" class="drop-target-group" data-expected-gate="NOT"><rect class="drop-zone" x="630" y="200" width="100" height="50" rx="5" /><g class="placed-gate-container"></g></g>
+
+                    <!-- OUTPUT -->
+                    <path id="line-out" d="M730 225 h50" class="circuit-line" />
+                    <foreignObject x="790" y="195" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="output-display" class="bit-display output off">0</div></div></foreignObject>
+                    <text x="820" y="270" class="circuit-text" text-anchor="middle">Output</text>
+                </svg>`;
+
+            function setupPuzzle() {
+                const container = document.getElementById('puzzle-container');
+                container.innerHTML = `
+                    <div id="instruction-text" class="text-center mb-6">
+                        <h1 class="text-3xl font-bold text-white">${puzzleState.title}</h1>
+                        <p class="text-slate-400 max-w-3xl mx-auto">${puzzleState.buildText}</p>
+                    </div>
+                    <div class="circuit-bg p-4 sm:p-8 rounded-lg shadow-2xl">
+                        <div class="flex flex-col items-center gap-8">
+                            <div id="parts-bin" class="flex gap-4 p-2 bg-slate-900/50 rounded-lg">${gatePartsSvg}</div>
+                            <div id="schematic-area" class="w-full">${xnorCircuitSchematic}</div>
+                            <div id="truth-table-container" class="w-full mt-4"></div>
+                        </div>
+                        <div class="mt-6 text-right h-10">
+                            <button id="puzzle-complete-btn" class="hidden bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">Station Complete!</button>
+                        </div>
+                    </div>`;
+                
+                setupInteractiveCircuit();
+                updateTruthTable();
+                updateCircuit();
+            }
+
+            function setupInteractiveCircuit() {
+                let draggedItem = null;
+                let touchDragClone = null;
+                const partsBin = document.getElementById('parts-bin');
+
+                // --- Input Toggle Listeners ---
+                document.getElementById('input-a-signal').addEventListener('click', () => {
+                    puzzleState.isInputA_On = !puzzleState.isInputA_On;
+                    updateCircuit();
+                });
+                document.getElementById('input-b-signal').addEventListener('click', () => {
+                    puzzleState.isInputB_On = !puzzleState.isInputB_On;
+                    updateCircuit();
+                });
+
+                // --- Drag and Drop Logic ---
+                function createDraggableClone(originalPart) {
+                    const clone = originalPart.cloneNode(true);
+                    clone.dataset.gateType = originalPart.dataset.gateType;
+                    addDragListeners(clone);
+                    return clone;
+                }
+
+                function handleDrop(slotElement, gateElement) {
+                    const gateType = gateElement.dataset.gateType;
+                    const expectedType = slotElement.dataset.expectedGate;
+                    
+                    const container = slotElement.querySelector('.placed-gate-container');
+                    if (container.children.length > 0) return; // Slot already filled
+
+                    container.innerHTML = ''; 
+                    
+                    const placedGateSVG = gateElement.querySelector('svg').cloneNode(true);
+                    placedGateSVG.classList.add('placed-gate-svg');
+                    const slotRect = slotElement.querySelector('.drop-zone').getBBox();
+                    
+                    placedGateSVG.setAttribute('width', '80');
+                    placedGateSVG.setAttribute('height', '56');
+                    placedGateSVG.setAttribute('x', slotRect.x + (slotRect.width - 80) / 2);
+                    placedGateSVG.setAttribute('y', slotRect.y + (slotRect.height - 56) / 2);
+                    
+                    container.appendChild(placedGateSVG);
+                    slotElement.dataset.gatePlaced = gateType;
+                    slotElement.querySelector('.drop-zone').classList.toggle('correct', gateType === expectedType);
+
+                    puzzleState.placedGates++;
+                    
+                    // Immediately update circuit on drop
+                    updateCircuit(); 
+                }
+
+                function addDragListeners(part) {
+                     part.addEventListener('dragstart', e => {
+                        draggedItem = part;
+                        setTimeout(() => part.classList.add('dragging'), 0);
+                    });
+                    part.addEventListener('dragend', () => {
+                        draggedItem?.classList.remove('dragging');
+                        draggedItem = null;
+                    });
+                    part.addEventListener('touchstart', e => {
+                        e.preventDefault();
+                        draggedItem = part;
+                        touchDragClone = part.cloneNode(true);
+                        touchDragClone.classList.add('touch-drag-clone');
+                        document.body.appendChild(touchDragClone);
+                        updateClonePosition(e.touches[0]);
+                    }, { passive: false });
+                }
+
+                document.querySelectorAll('.draggable-part').forEach(addDragListeners);
+
+                document.querySelectorAll('.drop-target-group').forEach(slot => {
+                    slot.addEventListener('dragover', e => e.preventDefault());
+                    slot.addEventListener('drop', e => {
+                        e.preventDefault();
+                        if (draggedItem) {
+                            handleDrop(slot, draggedItem);
+                            // Clone the part back into the bin so it can be reused
+                            if (!draggedItem.parentElement.id.startsWith('slot')) {
+                                const newPart = createDraggableClone(draggedItem);
+                                partsBin.appendChild(newPart);
+                                draggedItem.remove();
+                            }
+                        }
+                    });
+                });
+
+                document.body.addEventListener('touchmove', e => {
+                    if (!draggedItem || !touchDragClone) return;
+                    e.preventDefault();
+                    updateClonePosition(e.touches[0]);
+                }, { passive: false });
+
+                document.body.addEventListener('touchend', e => {
+                    if (!draggedItem || !touchDragClone) return;
+                    
+                    touchDragClone.style.display = 'none';
+                    const touch = e.changedTouches[0];
+                    const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.drop-target-group');
+                    
+                    if (dropTarget) {
+                        handleDrop(dropTarget, draggedItem);
+                         if (!draggedItem.parentElement.id.startsWith('slot')) {
+                            const newPart = createDraggableClone(draggedItem);
+                            partsBin.appendChild(newPart);
+                            draggedItem.remove();
+                        }
+                    }
+
+                    document.body.removeChild(touchDragClone);
+                    touchDragClone = null;
+                    draggedItem = null;
+                });
+
+                function updateClonePosition(touch) {
+                    touchDragClone.style.left = `${touch.clientX - 40}px`;
+                    touchDragClone.style.top = `${touch.clientY - 28}px`;
+                }
+            }
+            
+            function updateCircuit() {
+                const { isInputA_On, isInputB_On } = puzzleState;
+                const getGateType = id => document.getElementById(id)?.dataset.gatePlaced || 'EMPTY';
+
+                const gate1Type = getGateType('slot-1'); // NOT B
+                const gate2Type = getGateType('slot-2'); // AND
+                const gate3Type = getGateType('slot-3'); // NOT A
+                const gate4Type = getGateType('slot-4'); // AND
+                const gate5Type = getGateType('slot-5'); // OR
+                const gate6Type = getGateType('slot-6'); // Final NOT
+
+                // Logic Path 1: A AND (NOT B)
+                const not1_out = gateLogic[gate1Type](isInputB_On);
+                const and1_out = gateLogic[gate2Type](isInputA_On, not1_out);
+
+                // Logic Path 2: (NOT A) AND B
+                const not2_out = gateLogic[gate3Type](isInputA_On);
+                const and2_out = gateLogic[gate4Type](not2_out, isInputB_On);
+
+                // XOR result
+                const or_out = gateLogic[gate5Type](and1_out, and2_out);
+
+                // Final XNOR result
+                const finalResult = gateLogic[gate6Type](or_out);
+                
+                // Update UI displays
+                document.getElementById('input-a-signal').classList.toggle('on', isInputA_On);
+                document.getElementById('input-a-signal').textContent = isInputA_On ? '1' : '0';
+                document.getElementById('input-b-signal').classList.toggle('on', isInputB_On);
+                document.getElementById('input-b-signal').textContent = isInputB_On ? '1' : '0';
+                document.getElementById('output-display').classList.toggle('on', finalResult);
+                document.getElementById('output-display').textContent = finalResult ? '1' : '0';
+
+                const powerClass = (el, isPowered) => document.getElementById(el)?.classList.toggle('powered', isPowered);
+                
+                powerClass('line-a-main', isInputA_On); powerClass('line-a-down', isInputA_On); powerClass('line-a-to-and1', isInputA_On); powerClass('line-a-to-not2', isInputA_On); powerClass('junction-a', isInputA_On); powerClass('junction-a2', isInputA_On);
+                powerClass('line-b-main', isInputB_On); powerClass('line-b-up', isInputB_On); powerClass('line-b-to-not1', isInputB_On); powerClass('line-b-to-and2', isInputB_On); powerClass('junction-b', isInputB_On); powerClass('junction-b2', isInputB_On);
+                powerClass('line-not1-to-and1', not1_out); powerClass('line-and1-out', and1_out);
+                powerClass('line-not2-to-and2', not2_out); powerClass('line-and2-out', and2_out);
+                powerClass('line-or-out', or_out);
+                powerClass('line-out', finalResult);
+                
+                updateTruthTable();
+
+                // Check for completion
+                if (puzzleState.placedGates === 6) {
+                    document.querySelector('#instruction-text p').innerHTML = puzzleState.testText;
+                    const isCorrectBuild = gate1Type === 'NOT' && gate2Type === 'AND' && gate3Type === 'NOT' && gate4Type === 'AND' && gate5Type === 'OR' && gate6Type === 'NOT';
+                    if (isCorrectBuild) {
+                        const inputKey = `${isInputA_On ? 1 : 0}${isInputB_On ? 1 : 0}`;
+                        if (!puzzleState.discoveredCombinations.has(inputKey)) {
+                            puzzleState.discoveredCombinations.add(inputKey);
+                        }
+                        if (puzzleState.discoveredCombinations.size === 4) {
+                            document.getElementById('puzzle-complete-btn').classList.remove('hidden');
+                        }
+                    }
+                }
+            }
+
+            function updateTruthTable() {
+                const { isInputA_On, isInputB_On } = puzzleState;
+                const container = document.getElementById('truth-table-container');
+                const combinations = ['00', '01', '10', '11'];
+                const currentKey = `${isInputA_On ? 1 : 0}${isInputB_On ? 1 : 0}`;
+                let rows = '';
+
+                for (const combo of combinations) {
+                    const isCurrent = combo === currentKey;
+                    const isDiscovered = puzzleState.discoveredCombinations.has(combo);
+                    const [inA, inB] = combo.split('');
+                    const out = (inA === inB) ? '1' : '0';
+                    
+                    rows += `<tr class="${isCurrent ? 'current' : ''} ${isDiscovered ? 'discovered' : ''}">
+                                <td>${inA}</td>
+                                <td>${inB}</td>
+                                <td>${(isDiscovered && puzzleState.placedGates === 6) ? out : '?'}</td>
+                             </tr>`;
+                }
+                
+                container.innerHTML = `
+                    <h2 class="text-xl font-bold text-white mb-2">Truth Table</h2>
+                    <table class="truth-table mx-auto">
+                        <thead><tr><th>A</th><th>B</th><th>Output</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>`;
+            }
+
+            setupPuzzle();
+        });
+    </script>
+</body>
+</html>
+

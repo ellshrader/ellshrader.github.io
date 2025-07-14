@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binary Addition Puzzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            touch-action: none; /* Prevents scrolling on mobile during drag */
+        }
+        .puzzle-container {
+            background-color: #1e293b;
+            border: 1px solid #38bdf8;
+            display: flex;
+            flex-direction: column;
+            min-height: 550px; /* Increased height for footer */
+        }
+        .puzzle-content {
+            flex-grow: 1;
+        }
+        .instruction-text {
+            color: #94a3b8;
+        }
+        .number-block {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #334155;
+            border: 2px solid #475569;
+            width: 56px; /* Slightly smaller for equation */
+            height: 56px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #e2e8f0;
+            cursor: grab;
+            user-select: none;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        .number-block.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+        .equation-slot {
+            background-color: rgba(56, 189, 248, 0.1);
+            border: 2px dashed #38bdf8;
+            width: 60px;
+            height: 60px;
+            transition: background-color 0.2s;
+        }
+        .equation-slot.hover {
+            background-color: rgba(56, 189, 248, 0.2);
+        }
+        .result-block, .summary-block {
+            font-family: 'Roboto Mono', monospace;
+            opacity: 0;
+            transform: scale(0.9);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .result-block.show, .summary-block.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .column-addition {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 2.5rem;
+            line-height: 1.2;
+        }
+        .column-cell {
+            width: 40px;
+            height: 40px;
+            position: relative;
+        }
+        .column-cell.tappable {
+            cursor: pointer;
+            border-bottom: 2px solid #38bdf8;
+        }
+        .column-cell.tappable:hover {
+            background-color: rgba(56, 189, 248, 0.1);
+        }
+        .result-input {
+             cursor: pointer;
+             border-bottom: 2px solid #38bdf8;
+             width: 100%;
+             height: 100%;
+        }
+        .result-input.active {
+            border-bottom: 2px solid #facc15;
+            animation: pulse-border 1.5s infinite;
+        }
+        .result-input.correct {
+            color: #4ade80;
+            border-bottom: 2px solid #4ade80;
+        }
+        .result-input.incorrect {
+            animation: shake 0.5s;
+            border-bottom: 2px solid #f87171;
+        }
+        .carry-bit {
+            font-size: 1.5rem;
+            color: #facc15;
+            opacity: 0;
+            transition: opacity 0.3s;
+            position: absolute; /* Positioned within the carry-row cell */
+            top: 0; left: 0; right: 0; bottom: 0;
+        }
+        .carry-bit.animate-in {
+            animation: drop-in 0.5s forwards;
+        }
+        @keyframes drop-in {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: #facc15; }
+            50% { border-color: #e2e8f0; }
+        }
+        .completion-button {
+            opacity: 0;
+            transition: opacity 0.5s ease-in;
+        }
+        .completion-button.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="puzzle-container" class="p-6 rounded-lg w-full max-w-md mx-auto">
+        <!-- Puzzle content is injected here by JavaScript -->
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const puzzleContainer = document.getElementById('puzzle-container');
+        let gameState = {
+            stage: 1, // 1, 2, or 3
+            filledSlots: [false, false],
+            currentColumn: 0,
+            carry: 0,
+        };
+
+        // --- PUZZLE 1: DRAG AND DROP ---
+        let draggedElement = null;
+
+        function setupDragAndDrop() {
+            const draggables = document.querySelectorAll('.draggable');
+            const slots = document.querySelectorAll('.equation-slot');
+
+            draggables.forEach(draggable => {
+                draggable.addEventListener('dragstart', (e) => {
+                    draggedElement = e.target;
+                    setTimeout(() => e.target.classList.add('dragging'), 0);
+                });
+                draggable.addEventListener('dragend', (e) => e.target.classList.remove('dragging'));
+                draggable.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    draggedElement = e.target;
+                    draggedElement.classList.add('dragging');
+                }, { passive: false });
+                draggable.addEventListener('touchend', (e) => {
+                    draggedElement.classList.remove('dragging');
+                    const touch = e.changedTouches[0];
+                    const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+                    
+                    if (dropTarget && dropTarget.classList.contains('equation-slot')) {
+                        handleDrop(dropTarget);
+                    }
+                    draggedElement = null;
+                });
+            });
+
+            slots.forEach(slot => {
+                slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('hover'); });
+                slot.addEventListener('dragleave', () => slot.classList.remove('hover'));
+                slot.addEventListener('drop', (e) => { e.preventDefault(); slot.classList.remove('hover'); handleDrop(slot); });
+            });
+        }
+
+        function handleDrop(slot) {
+            const slotIndex = parseInt(slot.dataset.slot);
+            if (draggedElement && !gameState.filledSlots[slotIndex]) {
+                draggedElement.style.display = 'none';
+                slot.textContent = '1';
+                slot.classList.remove('border-dashed');
+                gameState.filledSlots[slotIndex] = true;
+                
+                if (gameState.filledSlots[0] && gameState.filledSlots[1]) {
+                    setTimeout(solvePuzzleOne, 500);
+                }
+                draggedElement = null;
+            }
+        }
+
+        function solvePuzzleOne() {
+            const equationArea = document.getElementById('equation-area');
+            equationArea.innerHTML = `<div class="text-4xl text-yellow-300 animate-ping">✨</div>`;
+            
+            setTimeout(() => {
+                equationArea.innerHTML = `
+                    <div id="result-10" class="result-block flex items-center justify-center p-4 rounded-lg text-4xl">
+                        <span class="text-green-400">10</span>
+                    </div>
+                `;
+                setTimeout(() => document.getElementById('result-10').classList.add('show'), 100);
+            }, 500);
+            
+            setTimeout(() => {
+                const summaryArea = document.getElementById('summary-area');
+                summaryArea.innerHTML = `
+                    <div class="summary-block text-center">
+                        <p class="text-xl text-white">one + one = two</p>
+                        <p class="text-2xl font-bold text-cyan-400 mt-1">1 + 1 = 10</p>
+                        <p class="text-sm instruction-text mt-2">(In binary, "10" is how you write the number two)</p>
+                    </div>
+                `;
+                summaryArea.querySelector('.summary-block').classList.add('show');
+            }, 1500);
+
+            setTimeout(() => showCompletionButton('Next Puzzle', 2), 3000);
+        }
+
+        // --- PUZZLE 2: GUIDED TAPPING ---
+        function setupGuidedAddition() {
+            const columns = document.querySelectorAll('.column-cell.tappable');
+            columns.forEach(col => {
+                const colIndex = parseInt(col.id.split('-')[1]);
+                col.addEventListener('click', () => handleGuidedTap(colIndex));
+            });
+        }
+
+        function handleGuidedTap(index) {
+            if (index !== gameState.currentColumn) {
+                const colEl = document.getElementById(`col-${index}`);
+                colEl.classList.add('animate-pulse');
+                setTimeout(() => colEl.classList.remove('animate-pulse'), 500);
+                return;
+            }
+
+            const colEl = document.getElementById(`col-${index}`);
+            const val1 = parseInt(colEl.dataset.val1) || 0;
+            const val2 = parseInt(colEl.dataset.val2) || 0;
+            
+            const sum = val1 + val2 + gameState.carry;
+            const resultBit = sum % 2;
+            const carryBit = Math.floor(sum / 2);
+
+            colEl.textContent = resultBit;
+            colEl.classList.remove('tappable', 'border-b-2', 'border-blue-400');
+            colEl.classList.add('text-green-400', 'font-bold');
+
+            gameState.carry = carryBit;
+            gameState.currentColumn++;
+
+            if (gameState.currentColumn < 4) {
+                const nextCarryCell = document.getElementById(`carry-${gameState.currentColumn}`);
+                if (nextCarryCell && gameState.carry > 0) {
+                    nextCarryCell.querySelector('.carry-bit').textContent = gameState.carry;
+                    nextCarryCell.querySelector('.carry-bit').classList.add('animate-in');
+                }
+            }
+            
+            if (gameState.currentColumn === 4) {
+                 setTimeout(() => {
+                    document.getElementById('summary-area-2').innerHTML = `
+                        <div class="summary-block text-center mt-6">
+                            <p class="text-xl text-white">five + three = eight</p>
+                            <p class="text-2xl font-bold text-cyan-400 mt-1">101 + 11 = 1000</p>
+                        </div>
+                    `;
+                    document.querySelector('#summary-area-2 .summary-block').classList.add('show');
+                 }, 500);
+                 setTimeout(() => showCompletionButton('Final Puzzle', 3), 1500);
+            }
+        }
+
+        // --- PUZZLE 3: INTERACTIVE INPUT ---
+        function setupInteractiveAddition() {
+            document.querySelectorAll('.result-input').forEach(input => {
+                input.addEventListener('click', () => {
+                    const colIndex = parseInt(input.parentElement.id.split('-')[1]);
+                    if (colIndex !== gameState.currentColumn) return;
+                    
+                    if (input.textContent === '?') input.textContent = '0';
+                    else if (input.textContent === '0') input.textContent = '1';
+                    else input.textContent = '?';
+                });
+            });
+            document.getElementById('check-answer-btn').addEventListener('click', handleCheckAnswer);
+            document.getElementById(`input-${gameState.currentColumn}`).querySelector('.result-input').classList.add('active');
+        }
+
+        function handleCheckAnswer() {
+            const inputContainer = document.getElementById(`input-${gameState.currentColumn}`);
+            const inputEl = inputContainer.querySelector('.result-input');
+            const userInput = inputEl.textContent;
+
+            if (userInput === '?') return;
+
+            // NEW MATH: five (0101) + four (0100) = nine (1001)
+            const problem = {
+                val1: [1,0,1,0], // five
+                val2: [0,0,1,0]  // four
+            };
+            const val1 = problem.val1[gameState.currentColumn];
+            const val2 = problem.val2[gameState.currentColumn];
+
+            const sum = val1 + val2 + gameState.carry;
+            const correctResult = sum % 2;
+            const carryBit = Math.floor(sum / 2);
+
+            if (parseInt(userInput) === correctResult) {
+                // Correct
+                inputEl.classList.remove('active');
+                inputEl.classList.add('correct');
+                gameState.carry = carryBit;
+                gameState.currentColumn++;
+
+                if (gameState.currentColumn < 4) {
+                    const nextCarryCell = document.getElementById(`carry-${gameState.currentColumn}`);
+                    if (nextCarryCell && gameState.carry > 0) {
+                        nextCarryCell.querySelector('.carry-bit').textContent = gameState.carry;
+                        nextCarryCell.querySelector('.carry-bit').classList.add('animate-in');
+                    }
+                    document.getElementById(`input-${gameState.currentColumn}`).querySelector('.result-input').classList.add('active');
+                } else {
+                    // Puzzle complete
+                    document.getElementById('check-answer-btn').style.display = 'none';
+                    setTimeout(() => {
+                        document.getElementById('summary-area-3').innerHTML = `
+                            <div class="summary-block text-center mt-6">
+                                <p class="text-xl text-white">five + four = nine</p>
+                                <p class="text-2xl font-bold text-cyan-400 mt-1">0101 + 0100 = 1001</p>
+                            </div>
+                        `;
+                        document.querySelector('#summary-area-3 .summary-block').classList.add('show');
+                    }, 500);
+                    setTimeout(() => showCompletionButton('Start Over', 1), 1500);
+                }
+            } else {
+                // Incorrect
+                inputEl.classList.add('incorrect');
+                setTimeout(() => {
+                    inputEl.classList.remove('incorrect');
+                    inputEl.textContent = '?';
+                }, 500);
+            }
+        }
+
+        // --- RENDERING & COMPLETION ---
+        function render() {
+            gameState.filledSlots = [false, false];
+            gameState.currentColumn = 0;
+            gameState.carry = 0;
+
+            let contentHTML = '';
+            let footerHTML = '<div id="completion-controls" class="p-6 h-24 flex justify-end items-center"></div>';
+
+            if (gameState.stage === 1) {
+                contentHTML = `
+                    <div class="puzzle-content p-6">
+                        <h2 class="text-2xl font-bold text-center text-white mb-2">Let's Add</h2>
+                        <p class="instruction-text text-center mb-6">Drag the '1' blocks into the empty slots to add them together.</p>
+                        <div class="flex justify-center items-center gap-4 mb-8">
+                            <div class="draggable number-block flex items-center justify-center" draggable="true">1</div>
+                            <div class="draggable number-block flex items-center justify-center" draggable="true">1</div>
+                        </div>
+                        <div id="equation-area" class="flex justify-center items-center text-4xl text-slate-500 font-mono h-24">
+                            <div data-slot="0" class="equation-slot rounded-lg flex items-center justify-center text-green-400"></div>
+                            <span class="mx-4">+</span>
+                            <div data-slot="1" class="equation-slot rounded-lg flex items-center justify-center text-green-400"></div>
+                            <span class="mx-4">=</span>
+                            <span>?</span>
+                        </div>
+                        <div id="summary-area" class="mt-4 h-24"></div>
+                    </div>
+                `;
+            } else if (gameState.stage === 2) {
+                contentHTML = `
+                    <div class="puzzle-content p-6">
+                        <h2 class="text-2xl font-bold text-center text-white mb-2">Bigger Numbers</h2>
+                        <p class="instruction-text text-center mb-6">Add <strong>101</strong> and <strong>11</strong>. Tap the columns from right to left to solve.</p>
+                        <div class="column-addition text-center mx-auto w-fit">
+                            <div class="flex justify-end">
+                                <div id="carry-3" class="column-cell"><div class="carry-bit"></div></div>
+                                <div id="carry-2" class="column-cell"><div class="carry-bit"></div></div>
+                                <div id="carry-1" class="column-cell"><div class="carry-bit"></div></div>
+                                <div id="carry-0" class="column-cell"></div>
+                            </div>
+                            <div class="flex justify-end"><div class="column-cell"></div><div class="column-cell">1</div><div class="column-cell">0</div><div class="column-cell">1</div></div>
+                            <div class="flex justify-end items-center"><span class="mr-2">+</span><div class="column-cell"></div><div class="column-cell"></div><div class="column-cell">1</div><div class="column-cell">1</div></div>
+                            <div class="border-b-2 border-white w-full my-2"></div>
+                            <div class="flex justify-end">
+                                <div id="col-3" data-val1="0" data-val2="0" class="column-cell tappable flex items-center justify-center">?</div>
+                                <div id="col-2" data-val1="1" data-val2="0" class="column-cell tappable flex items-center justify-center">?</div>
+                                <div id="col-1" data-val1="0" data-val2="1" class="column-cell tappable flex items-center justify-center">?</div>
+                                <div id="col-0" data-val1="1" data-val2="1" class="column-cell tappable flex items-center justify-center">?</div>
+                            </div>
+                        </div>
+                        <div id="summary-area-2" class="mt-4 h-20"></div>
+                    </div>
+                `;
+            } else if (gameState.stage === 3) {
+                 contentHTML = `
+                    <div class="puzzle-content p-6">
+                        <h2 class="text-2xl font-bold text-center text-white mb-2">Final Challenge</h2>
+                        <p class="instruction-text text-center mb-6">Solve <strong>0101 + 0100</strong>. Tap a result box to set it to 0 or 1, then check your answer.</p>
+                        <div class="column-addition text-center mx-auto w-fit">
+                             <div class="flex justify-end">
+                                <div id="carry-3" class="column-cell"><div class="carry-bit"></div></div>
+                                <div id="carry-2" class="column-cell"><div class="carry-bit"></div></div>
+                                <div id="carry-1" class="column-cell"><div class="carry-bit"></div></div>
+                                <div id="carry-0" class="column-cell"></div>
+                            </div>
+                            <div class="flex justify-end"><div class="column-cell">0</div><div class="column-cell">1</div><div class="column-cell">0</div><div class="column-cell">1</div></div>
+                            <div class="flex justify-end items-center"><span class="mr-2">+</span><div class="column-cell">0</div><div class="column-cell">1</div><div class="column-cell">0</div><div class="column-cell">0</div></div>
+                            <div class="border-b-2 border-white w-full my-2"></div>
+                            <div class="flex justify-end">
+                                <div id="input-3" class="column-cell"><div class="result-input flex items-center justify-center">?</div></div>
+                                <div id="input-2" class="column-cell"><div class="result-input flex items-center justify-center">?</div></div>
+                                <div id="input-1" class="column-cell"><div class="result-input flex items-center justify-center">?</div></div>
+                                <div id="input-0" class="column-cell"><div class="result-input flex items-center justify-center">?</div></div>
+                            </div>
+                        </div>
+                        <div id="summary-area-3" class="mt-4 h-20"></div>
+                    </div>
+                `;
+                footerHTML = `<div id="completion-controls" class="p-6 h-24 flex justify-center items-center"><button id="check-answer-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-8 rounded-lg">Check</button></div>`;
+            }
+
+            puzzleContainer.innerHTML = contentHTML + footerHTML;
+            
+            if (gameState.stage === 1) setupDragAndDrop();
+            else if (gameState.stage === 2) setupGuidedAddition();
+            else if (gameState.stage === 3) setupInteractiveAddition();
+        }
+        
+        function showCompletionButton(text, nextStage) {
+            const controls = document.getElementById('completion-controls');
+            if (!controls) return;
+
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            btn.className = 'completion-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg';
+            
+            btn.addEventListener('click', () => {
+                gameState.stage = nextStage;
+                render();
+            });
+
+            controls.innerHTML = '';
+            controls.appendChild(btn);
+            
+            setTimeout(() => btn.classList.add('show'), 50);
+        }
+
+        // Initial render
+        render();
+    });
+    </script>
+</body>
+</html>
+

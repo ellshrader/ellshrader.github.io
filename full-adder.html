@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Full-Adder Explainer (Detailed)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            touch-action: manipulation;
+        }
+        .puzzle-container {
+            background-color: #1e293b;
+            border: 1px solid #f97316;
+        }
+        .bit-display {
+            font-family: 'Roboto Mono', monospace;
+            transition: all 0.2s ease-in-out;
+            user-select: none;
+            cursor: pointer;
+            width: 56px;
+            height: 56px;
+            border-radius: 0.375rem;
+            border-width: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .bit-display.off { background-color: #475569; color: #f87171; border-color: #475569; }
+        .bit-display.on { background-color: #1e293b; color: #4ade80; border-color: #4ade80; }
+        
+        .circuit-line { stroke: #475569; stroke-width: 4; stroke-linecap: round; transition: stroke 0.2s, filter 0.2s; fill: none; }
+        .circuit-line.powered { stroke: #fde047; filter: drop-shadow(0 0 3px #fde047); }
+        .junction { fill: #475569; transition: fill 0.2s; }
+        .junction.powered { fill: #fde047; }
+        
+        .component-label {
+            font-family: 'Roboto Mono', monospace;
+            fill: #fb923c;
+            font-size: 12px;
+            font-weight: bold;
+            text-anchor: middle;
+        }
+        .gate-symbol-and { fill: #3b82f6; }
+        .gate-symbol-xor { fill: #9333ea; }
+        .gate-symbol-or { fill: #be185d; }
+        .gate-text { font-size: 12px; font-weight: bold; fill: white; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+
+        .truth-table th, .truth-table td {
+            border: 1px solid #475569; padding: 0.5rem; text-align: center;
+            font-family: 'Roboto Mono', monospace; color: #cbd5e1; font-size: 1rem;
+        }
+        .truth-table th { background-color: #334155; }
+        .truth-table tr.current { background-color: #f97316; color: white; }
+        
+        .column-addition {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1.5rem;
+            line-height: 1.4;
+            background-color: #334155;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            width: 140px;
+            text-align: right;
+        }
+        .carry-bit {
+            color: #fde047;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .carry-bit.visible { opacity: 1; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-2 sm:p-4">
+
+    <div id="puzzle-container" class="p-4 sm:p-6 rounded-lg w-full max-w-7xl mx-auto">
+        <!-- Content injected by JS -->
+    </div>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const puzzleContainer = document.getElementById('puzzle-container');
+
+        let state = { inputs: { A: 0, B: 0, Cin: 0 } };
+
+        function render() {
+            puzzleContainer.innerHTML = `
+                <div class="text-center mb-4">
+                    <h1 class="text-2xl sm:text-3xl font-bold text-white">The Full-Adder (Detailed View)</h1>
+                    <p class="text-slate-400 max-w-4xl mx-auto mt-2">This is a more detailed look at the Full-Adder. Notice it's made of two Half-Adders (an XOR and an AND gate) and a final OR gate. Toggle the inputs to trace the path of the signals.</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                    <div class="lg:col-span-2 bg-slate-800 p-2 sm:p-4 rounded-lg shadow-inner">
+                        <svg viewBox="0 0 620 500" class="w-full">
+                            <!-- Inputs -->
+                            <text x="5" y="75" fill="#e2e8f0">A</text>
+                            <foreignObject x="20" y="50" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input_A" class="bit-display off">0</div></div></foreignObject>
+                            
+                            <text x="5" y="205" fill="#e2e8f0">B</text>
+                            <foreignObject x="20" y="180" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input_B" class="bit-display off">0</div></div></foreignObject>
+
+                            <text x="5" y="425" fill="#e2e8f0">C-in</text>
+                            <foreignObject x="20" y="400" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input_Cin" class="bit-display off">0</div></div></foreignObject>
+
+                            <!-- Half Adder 1 -->
+                            <text class="component-label" x="200" y="20">Half-Adder 1</text>
+                            <path id="line_a_main" d="M80 80 H 120" class="circuit-line" />
+                            <circle id="junc_a1" cx="120" cy="80" r="5" class="junction" />
+                            <path id="line_a_to_xor1" d="M120 80 V 80 H 150" class="circuit-line" />
+                            <path id="line_a_to_and1" d="M120 80 V 180 H 150" class="circuit-line" />
+                            
+                            <path id="line_b_main" d="M80 210 H 120" class="circuit-line" />
+                            <circle id="junc_b1" cx="120" cy="210" r="5" class="junction" />
+                            <path id="line_b_to_xor1" d="M120 210 V 100 H 150" class="circuit-line" />
+                            <path id="line_b_to_and1" d="M120 210 V 200 H 150" class="circuit-line" />
+
+                            <!-- HA1 Gates (XOR gate at y=70, AND gate at y=170) -->
+                            <g transform="translate(150, 70)"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-xor"/><path d="M5 5 Q 20 20, 5 35" stroke-width="4" stroke="#9333ea" fill="none"/><text x="28" y="20" class="gate-text">XOR</text></g>
+                            <g transform="translate(150, 170)"><path d="M10 5 H30 C 45 5, 45 35, 30 35 H10 Z" class="gate-symbol-and" /><text x="26" y="20" class="gate-text">AND</text></g>
+
+                            <!-- HA1 Outputs (Gate outputs are at x=190) -->
+                            <path id="line_ha1_sum" d="M190 90 H 280" class="circuit-line" />
+                            <text x="230" y="80" fill="#94a3b8" font-size="10px">Sum 1</text>
+                            <path id="line_ha1_carry" d="M190 190 H 400 V 380 H 430" class="circuit-line" />
+                            <text x="300" y="180" fill="#94a3b8" font-size="10px">Carry 1</text>
+
+                            <!-- Half Adder 2 -->
+                            <text class="component-label" x="375" y="250">Half-Adder 2</text>
+                            <path id="line_cin_main" d="M80 430 H 280" class="circuit-line" />
+                            <circle id="junc_cin" cx="280" cy="430" r="5" class="junction" />
+                            <path id="line_cin_to_xor2" d="M280 430 V 330 H 310" class="circuit-line" />
+                            <path id="line_cin_to_and2" d="M280 430 V 450 H 310" class="circuit-line" />
+
+                            <circle id="junc_sum1" cx="280" cy="90" r="5" class="junction" />
+                            <path id="line_sum1_to_xor2" d="M280 90 V 310 H 310" class="circuit-line" />
+                            <path id="line_sum1_to_and2" d="M280 90 V 430 H 310" class="circuit-line" />
+
+                            <!-- HA2 Gates (XOR gate at y=300, AND gate at y=420) -->
+                            <g transform="translate(310, 300)"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-xor"/><path d="M5 5 Q 20 20, 5 35" stroke-width="4" stroke="#9333ea" fill="none"/><text x="28" y="20" class="gate-text">XOR</text></g>
+                            <g transform="translate(310, 420)"><path d="M10 5 H30 C 45 5, 45 35, 30 35 H10 Z" class="gate-symbol-and" /><text x="26" y="20" class="gate-text">AND</text></g>
+
+                            <!-- HA2 Outputs (Gate outputs are at x=350) -->
+                            <path id="line_ha2_sum" d="M350 320 H 520" class="circuit-line" />
+                            <path id="line_ha2_carry" d="M350 440 H 400 V 400 H 430" class="circuit-line" />
+                            <text x="370" y="465" fill="#94a3b8" font-size="10px">Carry 2</text>
+
+                            <!-- Final OR Gate (at y=370)-->
+                             <g transform="translate(430, 370)"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-or"/><text x="28" y="20" class="gate-text">OR</text></g>
+                             <path id="line_or_out" d="M470 390 H 520" class="circuit-line" />
+
+                            <!-- Outputs -->
+                            <text x="530" y="300" fill="#e2e8f0">Final Sum</text>
+                            <foreignObject x="525" y="305" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="output_Sum" class="bit-display off">0</div></div></foreignObject>
+                            
+                            <text x="530" y="370" fill="#e2e8f0">Carry-Out</text>
+                            <foreignObject x="525" y="375" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="output_Cout" class="bit-display off">0</div></div></foreignObject>
+                        </svg>
+                    </div>
+
+                    <div class="flex flex-col gap-6">
+                        <div id="explanation-area" class="text-center"></div>
+                        <div id="truth-table-container"></div>
+                    </div>
+                </div>
+            `;
+            
+            ['A', 'B', 'Cin'].forEach(id => {
+                document.getElementById(`input_${id}`).addEventListener('click', () => {
+                    state.inputs[id] = 1 - state.inputs[id];
+                    updateModule();
+                });
+            });
+            
+            updateModule();
+        }
+
+        function updateModule() {
+            const { A, B, Cin } = state.inputs;
+            
+            // Logic
+            const sum1 = A ^ B;
+            const carry1 = A & B;
+            const finalSum = sum1 ^ Cin;
+            const carry2 = sum1 & Cin;
+            const finalCout = carry1 | carry2;
+
+            // Visuals
+            powerElement('input_A', A);
+            powerElement('input_B', B);
+            powerElement('input_Cin', Cin);
+            powerElement('output_Sum', finalSum);
+            powerElement('output_Cout', finalCout);
+
+            powerLine('line_a_main', A);
+            powerLine('line_a_to_xor1', A);
+            powerLine('line_a_to_and1', A);
+            powerJunc('junc_a1', A);
+
+            powerLine('line_b_main', B);
+            powerLine('line_b_to_xor1', B);
+            powerLine('line_b_to_and1', B);
+            powerJunc('junc_b1', B);
+            
+            powerLine('line_ha1_sum', sum1);
+            powerJunc('junc_sum1', sum1);
+            powerLine('line_ha1_carry', carry1);
+
+            powerLine('line_sum1_to_xor2', sum1);
+            powerLine('line_sum1_to_and2', sum1);
+
+            powerLine('line_cin_main', Cin);
+            powerJunc('junc_cin', Cin);
+            powerLine('line_cin_to_xor2', Cin);
+            powerLine('line_cin_to_and2', Cin);
+            
+            powerLine('line_ha2_sum', finalSum);
+            powerLine('line_ha2_carry', carry2);
+            powerLine('line_or_out', finalCout);
+
+            updateExplanation(A, B, Cin, finalSum, finalCout);
+            updateTruthTable(A, B, Cin);
+        }
+
+        function updateExplanation(a, b, cin, sum, cout) {
+            const container = document.getElementById('explanation-area');
+            const carryIsVisible = cout === 1;
+            container.innerHTML = `
+                <h3 class="text-xl font-bold text-white">Column Math</h3>
+                <div class="column-addition mx-auto mt-2">
+                    <div><span class="carry-bit ${carryIsVisible ? 'visible' : ''}">1</span>&nbsp;</div>
+                    <div>&nbsp;${cin} <span class="text-xs text-slate-400">(Cin)</span></div>
+                    <div>&nbsp;${a}</div>
+                    <div>+ ${b}</div>
+                    <div class="border-b-2 border-slate-400 my-1"></div>
+                    <div>${cout}${sum}</div>
+                </div>
+                <p class="mt-4 text-slate-400 max-w-xs mx-auto">The <span class="text-yellow-400 font-bold">Carry-Out</span> from this calculation becomes the <span class="text-yellow-400 font-bold">Carry-In</span> for the next column to the left.</p>
+            `;
+        }
+        
+        function updateTruthTable(currentA, currentB, currentCin) {
+            const container = document.getElementById('truth-table-container');
+            const combinations = [
+                {a:0,b:0,cin:0,cout:0,s:0}, {a:0,b:0,cin:1,cout:0,s:1},
+                {a:0,b:1,cin:0,cout:0,s:1}, {a:0,b:1,cin:1,cout:1,s:0},
+                {a:1,b:0,cin:0,cout:0,s:1}, {a:1,b:0,cin:1,cout:1,s:0},
+                {a:1,b:1,cin:0,cout:1,s:0}, {a:1,b:1,cin:1,cout:1,s:1},
+            ];
+            const rows = combinations.map(c => {
+                const isCurrent = (c.a === currentA && c.b === currentB && c.cin === currentCin);
+                return `<tr class="${isCurrent ? 'current' : ''}">
+                          <td>${c.cin}</td><td>${c.a}</td><td>${c.b}</td>
+                          <td class="font-bold text-green-400">${c.cout}</td>
+                          <td class="font-bold text-green-400">${c.s}</td>
+                        </tr>`;
+            }).join('');
+            container.innerHTML = `
+                <h3 class="text-xl font-bold text-white mb-2 text-center">Truth Table</h3>
+                <table class="truth-table mx-auto w-full">
+                    <thead><tr><th>C-in</th><th>A</th><th>B</th><th>C-out</th><th>Sum</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        function powerElement(id, isPowered) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.toggle('on', !!isPowered);
+                el.classList.toggle('off', !isPowered);
+                el.textContent = isPowered ? '1' : '0';
+            }
+        }
+
+        function powerLine(id, isPowered) {
+            document.getElementById(id)?.classList.toggle('powered', !!isPowered);
+        }
+        function powerJunc(id, isPowered) {
+            document.getElementById(id)?.classList.toggle('powered', !!isPowered);
+        }
+
+        render();
+    });
+    </script>
+</body>
+</html>
+

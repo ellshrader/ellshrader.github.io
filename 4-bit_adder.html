@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4-Bit Adding Machine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            touch-action: manipulation;
+        }
+        .container {
+            background-color: #1e293b;
+            border: 1px solid #f59e0b; /* Amber border */
+        }
+        .bit-toggle {
+            font-family: 'Roboto Mono', monospace;
+            width: 48px; height: 48px;
+            border-radius: 0.375rem; border-width: 2px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.25rem; font-weight: bold;
+            cursor: pointer; user-select: none;
+            transition: all 0.2s ease-in-out;
+        }
+        .bit-toggle.off { background-color: #475569; color: #f87171; border-color: #475569; }
+        .bit-toggle.on { background-color: #1e293b; color: #4ade80; border-color: #4ade80; }
+        
+        .output-display {
+            font-family: 'Roboto Mono', monospace;
+            width: 48px; height: 48px;
+            border-radius: 0.375rem; border: 2px solid #94a3b8;
+            background-color: #334155;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.25rem; font-weight: bold;
+            transition: all 0.2s ease-in-out;
+        }
+        .output-display.on { color: #4ade80; border-color: #4ade80; }
+        .output-display.off { color: #94a3b8; }
+
+        .circuit-line { stroke: #475569; stroke-width: 3; stroke-linecap: round; transition: stroke 0.2s, filter 0.2s; fill: none; }
+        .circuit-line.powered { stroke: #fde047; filter: drop-shadow(0 0 3px #fde047); }
+        
+        .adder-block { fill: #334155; stroke: #f59e0b; stroke-width: 2; }
+        .adder-text { font-family: 'Roboto Mono', monospace; fill: #f59e0b; font-size: 10px; text-anchor: middle; pointer-events: none; }
+
+        .draggable-part { cursor: grab; }
+        .draggable-part.dragging { cursor: grabbing; opacity: 0.5; }
+        .drop-zone { fill: rgba(245, 158, 11, 0.1); stroke: #f59e0b; stroke-width: 2; stroke-dasharray: 4; transition: fill 0.2s; }
+        .touch-drag-clone { position: absolute; pointer-events: none; z-index: 1000; opacity: 0.7; }
+
+        .equation { font-family: 'Roboto Mono', monospace; background-color: #0f172a; }
+        .decimal-val { color: #60a5fa; }
+        .binary-val { color: #a78bfa; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-2 sm:p-4">
+
+    <div class="container p-4 sm:p-6 rounded-lg w-full max-w-5xl mx-auto">
+        
+        <div class="text-center mb-4">
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">Build-an-Adder</h1>
+            <p class="text-slate-400 max-w-3xl mx-auto mt-2">Toggle the inputs for A and B. Drag a Full-Adder to the circuit to add more bits and handle bigger numbers.</p>
+        </div>
+
+        <!-- Inputs Section -->
+        <div id="inputs-section" class="mb-4 p-4 bg-slate-800 rounded-lg">
+            <div class="flex items-center gap-4 mb-3">
+                <span class="font-bold text-lg w-6">A:</span>
+                <div id="inputs-A" class="flex flex-row-reverse justify-end gap-2"></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="font-bold text-lg w-6">B:</span>
+                <div id="inputs-B" class="flex flex-row-reverse justify-end gap-2"></div>
+            </div>
+        </div>
+
+        <!-- Circuit and Parts Bin -->
+        <div class="flex flex-col md:flex-row gap-4">
+            <!-- Circuit Diagram -->
+            <div id="circuit-diagram" class="flex-grow bg-slate-900/50 p-2 rounded-lg min-h-[250px]">
+                <svg id="circuit-svg" viewBox="0 0 800 250" class="w-full h-full"></svg>
+            </div>
+            <!-- Parts Bin -->
+            <div id="parts-bin-container" class="md:w-40 p-3 bg-slate-800 rounded-lg flex md:flex-col items-center justify-center">
+                <h3 class="text-lg font-bold mb-2 md:mb-4">Parts</h3>
+                <div id="draggable-full-adder" class="draggable-part">
+                    <svg width="80" height="120" viewBox="0 0 80 120">
+                        <rect class="adder-block" x="0" y="0" width="80" height="120" rx="5"/>
+                        <text class="adder-text" x="40" y="55">FULL</text>
+                        <text class="adder-text" x="40" y="70">ADDER</text>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Outputs Section -->
+        <div id="outputs-section" class="mt-4 p-4 bg-slate-800 rounded-lg">
+             <div class="flex items-center gap-4">
+                <span class="font-bold text-lg w-16">Sum:</span>
+                <div id="outputs-Sum" class="flex flex-row-reverse justify-end gap-2"></div>
+            </div>
+        </div>
+
+        <!-- Equation Section -->
+        <div id="equation-section" class="mt-4 p-4 rounded-lg text-center equation text-lg sm:text-xl">
+            <div id="decimal-equation" class="mb-2"></div>
+            <div id="binary-equation"></div>
+        </div>
+
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- STATE ---
+        let state = {
+            bitCount: 1,
+            numberA: [0, 0, 0, 0],
+            numberB: [0, 0, 0, 0],
+        };
+
+        // --- DOM ELEMENTS ---
+        const inputsAContainer = document.getElementById('inputs-A');
+        const inputsBContainer = document.getElementById('inputs-B');
+        const outputsSumContainer = document.getElementById('outputs-Sum');
+        const circuitSvg = document.getElementById('circuit-svg');
+        const decimalEq = document.getElementById('decimal-equation');
+        const binaryEq = document.getElementById('binary-equation');
+        const draggableFullAdder = document.getElementById('draggable-full-adder');
+
+        // --- DRAG AND DROP LOGIC ---
+        let draggedItem = null;
+        let touchDragClone = null;
+
+        function makeDraggable(element) {
+            element.setAttribute('draggable', 'true');
+            element.addEventListener('dragstart', e => {
+                if (state.bitCount >= 4) return;
+                draggedItem = element;
+                setTimeout(() => element.classList.add('dragging'), 0);
+            });
+            element.addEventListener('dragend', () => {
+                draggedItem?.classList.remove('dragging');
+                draggedItem = null;
+            });
+            element.addEventListener('touchstart', e => {
+                if (state.bitCount >= 4) return;
+                e.preventDefault();
+                draggedItem = element;
+                touchDragClone = element.cloneNode(true);
+                touchDragClone.classList.add('touch-drag-clone');
+                document.body.appendChild(touchDragClone);
+                updateClonePosition(e.touches[0]);
+            }, { passive: false });
+        }
+
+        function setupDropListeners() {
+            circuitSvg.addEventListener('dragover', e => {
+                if (state.bitCount >= 4) return;
+                e.preventDefault();
+            });
+            circuitSvg.addEventListener('drop', e => {
+                if (state.bitCount >= 4) return;
+                e.preventDefault();
+                const dropZone = document.getElementById(`drop-zone-${state.bitCount}`);
+                if (draggedItem && dropZone) {
+                    const svgPoint = svgPointFromEvent(e);
+                    if (isPointInRect(svgPoint, dropZone.getBBox())) {
+                        addBit();
+                    }
+                }
+            });
+        }
+        
+        document.body.addEventListener('touchmove', e => {
+            if (!draggedItem || !touchDragClone) return;
+            e.preventDefault();
+            updateClonePosition(e.touches[0]);
+        }, { passive: false });
+
+        document.body.addEventListener('touchend', e => {
+            if (!draggedItem || !touchDragClone) return;
+            const dropZone = document.getElementById(`drop-zone-${state.bitCount}`);
+            if (dropZone) {
+                 const svgPoint = svgPointFromEvent(e.changedTouches[0]);
+                 if (isPointInRect(svgPoint, dropZone.getBBox())) {
+                    addBit();
+                 }
+            }
+            document.body.removeChild(touchDragClone);
+            touchDragClone = null;
+            draggedItem = null;
+        });
+        
+        function svgPointFromEvent(evt) {
+            const pt = circuitSvg.createSVGPoint();
+            pt.x = evt.clientX;
+            pt.y = evt.clientY;
+            return pt.matrixTransform(circuitSvg.getScreenCTM().inverse());
+        }
+
+        function isPointInRect(point, rect) {
+            return point.x >= rect.x && point.x <= rect.x + rect.width &&
+                   point.y >= rect.y && point.y <= rect.y + rect.height;
+        }
+
+        function updateClonePosition(touch) {
+            if (!touchDragClone) return;
+            touchDragClone.style.left = `${touch.clientX - touchDragClone.offsetWidth / 2}px`;
+            touchDragClone.style.top = `${touch.clientY - touchDragClone.offsetHeight / 2}px`;
+        }
+        
+        function addBit() {
+            if (state.bitCount < 4) {
+                state.bitCount++;
+                init();
+            }
+        }
+
+        // --- LOGIC & CALCULATION ---
+        function calculateAndUpdate() {
+            let carry = 0;
+            let sumBits = [];
+            
+            // Half Adder (Bit 0)
+            const a0 = state.numberA[0];
+            const b0 = state.numberB[0];
+            const sum0 = a0 ^ b0;
+            carry = a0 & b0;
+            sumBits.push(sum0);
+            
+            powerLine(`line-a-in-0`, a0);
+            powerLine(`line-b-in-0`, b0);
+            powerLine(`line-sum-out-0`, sum0);
+            powerLine(`line-carry-out-0`, carry);
+            
+            // Full Adders (Bits 1 to 3)
+            for (let i = 1; i < state.bitCount; i++) {
+                const ai = state.numberA[i];
+                const bi = state.numberB[i];
+                const c_in = carry;
+
+                const sum_i = (ai ^ bi) ^ c_in;
+                carry = (ai & bi) | (c_in & (ai ^ bi));
+                sumBits.push(sum_i);
+
+                powerLine(`line-a-in-${i}`, ai);
+                powerLine(`line-b-in-${i}`, bi);
+                powerLine(`line-carry-in-${i}`, c_in);
+                powerLine(`line-sum-out-${i}`, sum_i);
+                powerLine(`line-carry-out-${i}`, carry);
+            }
+
+            sumBits.push(carry); // Final carry out
+            
+            updateOutputs(sumBits);
+            updateEquation(sumBits, carry);
+        }
+
+        // --- UI RENDERING ---
+        function renderInputs() {
+            inputsAContainer.innerHTML = '';
+            inputsBContainer.innerHTML = '';
+            for (let i = 0; i < state.bitCount; i++) {
+                inputsAContainer.appendChild(createToggle(`A-${i}`, state.numberA[i]));
+                inputsBContainer.appendChild(createToggle(`B-${i}`, state.numberB[i]));
+            }
+        }
+
+        function createToggle(id, value) {
+            const [num, bit] = id.split('-');
+            const div = document.createElement('div');
+            div.className = `bit-toggle ${value ? 'on' : 'off'}`;
+            div.textContent = value;
+            div.onclick = () => {
+                const targetArray = num === 'A' ? state.numberA : state.numberB;
+                targetArray[bit] = 1 - targetArray[bit];
+                div.textContent = targetArray[bit];
+                div.classList.toggle('on', targetArray[bit]);
+                div.classList.toggle('off', !targetArray[bit]);
+                calculateAndUpdate();
+            };
+            return div;
+        }
+
+        function renderCircuit() {
+            let svgHTML = '';
+            const blockWidth = 80;
+            const blockSpacing = 40;
+            const totalWidth = state.bitCount * blockWidth + (state.bitCount -1) * blockSpacing;
+            const startX = (800 - totalWidth) / 2;
+
+            // Draw adders from right to left (bit 0, 1, 2, 3)
+            for (let i = 0; i < state.bitCount; i++) {
+                const x = startX + (state.bitCount - 1 - i) * (blockWidth + blockSpacing);
+                
+                // Draw Adder Block and Wires
+                if (i === 0) { // Half-Adder
+                    svgHTML += `
+                        <rect class="adder-block" x="${x}" y="65" width="80" height="80" rx="5"/>
+                        <text class="adder-text" x="${x+40}" y="100">HALF</text>
+                        <text class="adder-text" x="${x+40}" y="115">ADDER</text>
+                        <text class="adder-text" x="${x-10}" y="85">A</text><path id="line-a-in-0" d="M${x-20} 80 H ${x}" class="circuit-line"/>
+                        <text class="adder-text" x="${x-10}" y="130">B</text><path id="line-b-in-0" d="M${x-20} 125 H ${x}" class="circuit-line"/>
+                        <text class="adder-text" x="${x+90}" y="105">S</text><path id="line-sum-out-0" d="M${x+80} 100 H ${x+100}" class="circuit-line"/>
+                        <text class="adder-text" x="${x+40}" y="30">C-out</text><path id="line-carry-out-0" d="M${x+40} 65 V 35" class="circuit-line"/>
+                    `;
+                } else { // Full-Adder
+                    const prev_x = x + blockWidth + blockSpacing;
+                    svgHTML += `
+                        <rect class="adder-block" x="${x}" y="50" width="80" height="120" rx="5"/>
+                        <text class="adder-text" x="${x+40}" y="100">FULL</text>
+                        <text class="adder-text" x="${x+40}" y="115">ADDER</text>
+                        <text class="adder-text" x="${x-10}" y="70">A</text><path id="line-a-in-${i}" d="M${x-20} 65 H ${x}" class="circuit-line"/>
+                        <text class="adder-text" x="${x-10}" y="155">B</text><path id="line-b-in-${i}" d="M${x-20} 150 H ${x}" class="circuit-line"/>
+                        <text class="adder-text" x="${x+90}" y="110">S</text><path id="line-sum-out-${i}" d="M${x+80} 105 H ${x+100}" class="circuit-line"/>
+                        <text class="adder-text" x="${x+40}" y="30">C-out</text><path id="line-carry-out-${i}" d="M${x+40} 50 V 35" class="circuit-line"/>
+                        
+                        <!-- This is the new connecting carry line -->
+                        <text class="adder-text" x="${x+90}" y="55">C-in</text>
+                        <path id="line-carry-in-${i}" d="M${prev_x+40} 35 H ${x+80} V 50" class="circuit-line"/>
+                    `;
+                }
+            }
+
+            // Draw drop zone if not at max bits
+            if (state.bitCount < 4) {
+                const i = state.bitCount;
+                const x = startX - blockWidth - blockSpacing;
+                svgHTML += `<rect id="drop-zone-${i}" class="drop-zone" x="${x}" y="50" width="80" height="120" rx="5"/>`;
+                svgHTML += `<text class="adder-text" fill="#94a3b8" x="${x+40}" y="100">DROP</text>`;
+                svgHTML += `<text class="adder-text" fill="#94a3b8" x="${x+40}" y="115">HERE</text>`;
+            }
+
+            circuitSvg.innerHTML = svgHTML;
+        }
+
+        function updateOutputs(sumBits) {
+            outputsSumContainer.innerHTML = '';
+            for (let i = 0; i < state.bitCount + 1; i++) {
+                const value = sumBits[i] || 0;
+                const div = document.createElement('div');
+                div.className = `output-display ${value ? 'on' : 'off'}`;
+                div.textContent = value;
+                outputsSumContainer.appendChild(div);
+            }
+        }
+
+        function updateEquation(sumBits, finalCarry) {
+            const numA_decimal = binToDec(state.numberA.slice(0, state.bitCount));
+            const numB_decimal = binToDec(state.numberB.slice(0, state.bitCount));
+            const sum_decimal = numA_decimal + numB_decimal;
+
+            const numA_binary = state.numberA.slice(0, state.bitCount).reverse().join('') || '0';
+            const numB_binary = state.numberB.slice(0, state.bitCount).reverse().join('') || '0';
+            const sum_binary = sumBits.reverse().join('') || '0';
+
+            decimalEq.innerHTML = `<span class="decimal-val">${numA_decimal}</span> + <span class="decimal-val">${numB_decimal}</span> = <span class="decimal-val">${sum_decimal}</span>`;
+            binaryEq.innerHTML = `<span class="binary-val">${numA_binary}</span> + <span class="binary-val">${numB_binary}</span> = <span class="binary-val">${sum_binary}</span>`;
+        }
+
+        function powerLine(id, isPowered) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('powered', !!isPowered);
+        }
+
+        // --- HELPERS ---
+        function binToDec(binArray) {
+            return parseInt(binArray.slice().reverse().join(''), 2) || 0;
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            renderInputs();
+            renderCircuit();
+            calculateAndUpdate();
+            if(state.bitCount >= 4) {
+                document.getElementById('parts-bin-container').style.display = 'none';
+            }
+        }
+        
+        makeDraggable(draggableFullAdder);
+        setupDropListeners();
+        init();
+    });
+    </script>
+</body>
+</html>
+
