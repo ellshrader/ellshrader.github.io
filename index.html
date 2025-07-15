@@ -45,18 +45,15 @@
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col md:flex-row">
 
-    <!-- Sidebar Navigation -->
     <nav class="w-full md:w-64 bg-gray-800 border-b md:border-b-0 md:border-r border-gray-700 flex-shrink-0">
         <div class="p-4">
             <h1 class="text-white text-2xl font-bold font-mono">Game Modules</h1>
             <p class="text-sm text-gray-400 mt-1">Select a level to begin.</p>
         </div>
         <ul id="module-menu" class="flex flex-row md:flex-col overflow-x-auto md:overflow-x-hidden p-2">
-            <!-- Menu items will be dynamically inserted here by JavaScript -->
-        </ul>
+            </ul>
     </nav>
 
-    <!-- Main Content Area -->
     <main class="flex-1 flex flex-col">
         <iframe id="game-frame" name="game-frame" srcdoc="<body style='background-color:#111827; color: #d1d5db; display:flex; justify-content:center; align-items:center; height:100vh; font-family: Inter, sans-serif;'><div><h1 style='font-size: 2rem; font-weight: bold;'>Welcome to the Logic Gate Simulator!</h1><p style='text-align:center; margin-top: 1rem;'>Select a module from the menu to start.</p></div></body>">
             Your browser does not support iframes.
@@ -69,7 +66,12 @@
             const iframe = document.getElementById('game-frame');
 
             const gameModules = [
-                { name: "Adding Binary", url: "adding_binary.html" },
+                // --- New modules added to the front ---
+                { name: "Letter Coder", url: "letter_coder.html" },
+                { name: "Binary Color", url: "binary_color.html" },
+                { name: "Binary Converter", url: "binary_converter.html" },
+
+                // --- Original modules ---
                 { name: "Transistor", url: "transistor.html" },
                 { name: "NOT Gate", url: "NOT-gate.html" },
                 { name: "AND Gate", url: "AND_gate.html" },
@@ -78,6 +80,11 @@
                 { name: "NOR Gate", url: "NOR_gate.html" },
                 { name: "XOR Gate", url: "XOR_gate.html" },
                 { name: "XNOR Gate", url: "XNOR.html" },
+
+                // --- "Adding Binary" moved to its new position ---
+                { name: "Adding Binary", url: "adding_binary.html" },
+                
+                // --- Remainder of original modules ---
                 { name: "Half-Adder", url: "half_adder.html" },
                 { name: "Full-Adder", url: "full-adder.html" },
                 { name: "4-bit Adder", url: "4-bit_adder.html" }
