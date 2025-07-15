@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Full-Adder Explainer (Detailed)</title>
+    <title>Interactive Full-Adder Explainer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -13,7 +13,7 @@
             color: #e2e8f0;
             touch-action: manipulation;
         }
-        .puzzle-container {
+        .explainer-container {
             background-color: #1e293b;
             border: 1px solid #f97316;
         }
@@ -52,13 +52,6 @@
         .gate-symbol-or { fill: #be185d; }
         .gate-text { font-size: 12px; font-weight: bold; fill: white; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 
-        .truth-table th, .truth-table td {
-            border: 1px solid #475569; padding: 0.5rem; text-align: center;
-            font-family: 'Roboto Mono', monospace; color: #cbd5e1; font-size: 1rem;
-        }
-        .truth-table th { background-color: #334155; }
-        .truth-table tr.current { background-color: #f97316; color: white; }
-        
         .column-addition {
             font-family: 'Roboto Mono', monospace;
             font-size: 1.5rem;
@@ -66,7 +59,7 @@
             background-color: #334155;
             padding: 1rem;
             border-radius: 0.375rem;
-            width: 140px;
+            width: 160px;
             text-align: right;
         }
         .carry-bit {
@@ -79,21 +72,27 @@
 </head>
 <body class="flex items-center justify-center min-h-screen p-2 sm:p-4">
 
-    <div id="puzzle-container" class="p-4 sm:p-6 rounded-lg w-full max-w-7xl mx-auto">
+    <div id="explainer-container" class="p-4 sm:p-6 rounded-lg w-full max-w-7xl mx-auto">
         <!-- Content injected by JS -->
     </div>
     
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const puzzleContainer = document.getElementById('puzzle-container');
+        const explainerContainer = document.getElementById('explainer-container');
 
-        let state = { inputs: { A: 0, B: 0, Cin: 0 } };
+        // The state holds the current value of our three inputs.
+        let state = { inputs: { A: 0, B: 0, CarryIn: 0 } };
 
         function render() {
-            puzzleContainer.innerHTML = `
+            explainerContainer.innerHTML = `
                 <div class="text-center mb-4">
-                    <h1 class="text-2xl sm:text-3xl font-bold text-white">The Full-Adder (Detailed View)</h1>
-                    <p class="text-slate-400 max-w-4xl mx-auto mt-2">This is a more detailed look at the Full-Adder. Notice it's made of two Half-Adders (an XOR and an AND gate) and a final OR gate. Toggle the inputs to trace the path of the signals.</p>
+                    <h1 class="text-2xl sm:text-3xl font-bold text-white">The Full-Adder Circuit</h1>
+                    <p class="text-slate-400 max-w-4xl mx-auto mt-2">A full-adder is a fundamental building block of computers. It adds three single-bit numbers together: A, B, and a 'Carry In' bit from the previous column.</p>
+                </div>
+
+                <div class="bg-slate-900/50 p-4 rounded-lg mb-6 border border-slate-700">
+                    <h2 class="text-lg font-bold text-orange-400 mb-2">What is a "Carry" bit?</h2>
+                    <p class="text-slate-400">If a column's sum is too large for one digit, the extra value is 'carried' over to the next column. This circuit produces a 'Carry-Out' bit that serves as the 'Carry-In' for the next calculation to the left.</p>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -106,9 +105,10 @@
                             <text x="5" y="205" fill="#e2e8f0">B</text>
                             <foreignObject x="20" y="180" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input_B" class="bit-display off">0</div></div></foreignObject>
 
-                            <text x="5" y="425" fill="#e2e8f0">C-in</text>
-                            <foreignObject x="20" y="400" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input_Cin" class="bit-display off">0</div></div></foreignObject>
+                            <text x="50" y="395" text-anchor="middle" fill="#e2e8f0" font-size="14px">Carry In</text>
+                            <foreignObject x="20" y="400" width="60" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><div id="input_CarryIn" class="bit-display off">0</div></div></foreignObject>
 
+                            <!-- Circuit Lines and Gates -->
                             <!-- Half Adder 1 -->
                             <text class="component-label" x="200" y="20">Half-Adder 1</text>
                             <path id="line_a_main" d="M80 80 H 120" class="circuit-line" />
@@ -121,11 +121,9 @@
                             <path id="line_b_to_xor1" d="M120 210 V 100 H 150" class="circuit-line" />
                             <path id="line_b_to_and1" d="M120 210 V 200 H 150" class="circuit-line" />
 
-                            <!-- HA1 Gates (XOR gate at y=70, AND gate at y=170) -->
                             <g transform="translate(150, 70)"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-xor"/><path d="M5 5 Q 20 20, 5 35" stroke-width="4" stroke="#9333ea" fill="none"/><text x="28" y="20" class="gate-text">XOR</text></g>
                             <g transform="translate(150, 170)"><path d="M10 5 H30 C 45 5, 45 35, 30 35 H10 Z" class="gate-symbol-and" /><text x="26" y="20" class="gate-text">AND</text></g>
 
-                            <!-- HA1 Outputs (Gate outputs are at x=190) -->
                             <path id="line_ha1_sum" d="M190 90 H 280" class="circuit-line" />
                             <text x="230" y="80" fill="#94a3b8" font-size="10px">Sum 1</text>
                             <path id="line_ha1_carry" d="M190 190 H 400 V 380 H 430" class="circuit-line" />
@@ -133,25 +131,23 @@
 
                             <!-- Half Adder 2 -->
                             <text class="component-label" x="375" y="250">Half-Adder 2</text>
-                            <path id="line_cin_main" d="M80 430 H 280" class="circuit-line" />
-                            <circle id="junc_cin" cx="280" cy="430" r="5" class="junction" />
-                            <path id="line_cin_to_xor2" d="M280 430 V 330 H 310" class="circuit-line" />
-                            <path id="line_cin_to_and2" d="M280 430 V 450 H 310" class="circuit-line" />
+                            <path id="line_carryIn_main" d="M80 430 H 280" class="circuit-line" />
+                            <circle id="junc_carryIn" cx="280" cy="430" r="5" class="junction" />
+                            <path id="line_carryIn_to_xor2" d="M280 430 V 330 H 310" class="circuit-line" />
+                            <path id="line_carryIn_to_and2" d="M280 430 V 450 H 310" class="circuit-line" />
 
                             <circle id="junc_sum1" cx="280" cy="90" r="5" class="junction" />
                             <path id="line_sum1_to_xor2" d="M280 90 V 310 H 310" class="circuit-line" />
                             <path id="line_sum1_to_and2" d="M280 90 V 430 H 310" class="circuit-line" />
 
-                            <!-- HA2 Gates (XOR gate at y=300, AND gate at y=420) -->
                             <g transform="translate(310, 300)"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-xor"/><path d="M5 5 Q 20 20, 5 35" stroke-width="4" stroke="#9333ea" fill="none"/><text x="28" y="20" class="gate-text">XOR</text></g>
                             <g transform="translate(310, 420)"><path d="M10 5 H30 C 45 5, 45 35, 30 35 H10 Z" class="gate-symbol-and" /><text x="26" y="20" class="gate-text">AND</text></g>
 
-                            <!-- HA2 Outputs (Gate outputs are at x=350) -->
                             <path id="line_ha2_sum" d="M350 320 H 520" class="circuit-line" />
                             <path id="line_ha2_carry" d="M350 440 H 400 V 400 H 430" class="circuit-line" />
                             <text x="370" y="465" fill="#94a3b8" font-size="10px">Carry 2</text>
 
-                            <!-- Final OR Gate (at y=370)-->
+                            <!-- Final OR Gate -->
                              <g transform="translate(430, 370)"><path d="M10 5 C 20 5, 30 10, 40 20 C 30 30, 20 35, 10 35 Q 25 20, 10 5 Z" class="gate-symbol-or"/><text x="28" y="20" class="gate-text">OR</text></g>
                              <path id="line_or_out" d="M470 390 H 520" class="circuit-line" />
 
@@ -164,37 +160,37 @@
                         </svg>
                     </div>
 
-                    <div class="flex flex-col gap-6">
+                    <div class="flex flex-col gap-6 items-center">
                         <div id="explanation-area" class="text-center"></div>
-                        <div id="truth-table-container"></div>
                     </div>
                 </div>
             `;
             
-            ['A', 'B', 'Cin'].forEach(id => {
+            // Add click listeners to the input boxes
+            ['A', 'B', 'CarryIn'].forEach(id => {
                 document.getElementById(`input_${id}`).addEventListener('click', () => {
                     state.inputs[id] = 1 - state.inputs[id];
-                    updateModule();
+                    updateCircuit();
                 });
             });
             
-            updateModule();
+            updateCircuit();
         }
 
-        function updateModule() {
-            const { A, B, Cin } = state.inputs;
+        function updateCircuit() {
+            const { A, B, CarryIn } = state.inputs;
             
-            // Logic
+            // --- LOGIC GATES ---
             const sum1 = A ^ B;
             const carry1 = A & B;
-            const finalSum = sum1 ^ Cin;
-            const carry2 = sum1 & Cin;
+            const finalSum = sum1 ^ CarryIn;
+            const carry2 = sum1 & CarryIn;
             const finalCout = carry1 | carry2;
 
-            // Visuals
+            // --- VISUALS ---
             powerElement('input_A', A);
             powerElement('input_B', B);
-            powerElement('input_Cin', Cin);
+            powerElement('input_CarryIn', CarryIn);
             powerElement('output_Sum', finalSum);
             powerElement('output_Cout', finalCout);
 
@@ -215,60 +211,38 @@
             powerLine('line_sum1_to_xor2', sum1);
             powerLine('line_sum1_to_and2', sum1);
 
-            powerLine('line_cin_main', Cin);
-            powerJunc('junc_cin', Cin);
-            powerLine('line_cin_to_xor2', Cin);
-            powerLine('line_cin_to_and2', Cin);
+            powerLine('line_carryIn_main', CarryIn);
+            powerJunc('junc_carryIn', CarryIn);
+            powerLine('line_carryIn_to_xor2', CarryIn);
+            powerLine('line_carryIn_to_and2', CarryIn);
             
             powerLine('line_ha2_sum', finalSum);
             powerLine('line_ha2_carry', carry2);
             powerLine('line_or_out', finalCout);
 
-            updateExplanation(A, B, Cin, finalSum, finalCout);
-            updateTruthTable(A, B, Cin);
+            updateExplanation(A, B, CarryIn, finalSum, finalCout);
         }
 
-        function updateExplanation(a, b, cin, sum, cout) {
+        function updateExplanation(a, b, carryIn, sum, cout) {
             const container = document.getElementById('explanation-area');
             const carryIsVisible = cout === 1;
             container.innerHTML = `
                 <h3 class="text-xl font-bold text-white">Column Math</h3>
                 <div class="column-addition mx-auto mt-2">
                     <div><span class="carry-bit ${carryIsVisible ? 'visible' : ''}">1</span>&nbsp;</div>
-                    <div>&nbsp;${cin} <span class="text-xs text-slate-400">(Cin)</span></div>
+                    <div>&nbsp;${carryIn} <span class="text-xs text-slate-400">(Carry-In)</span></div>
                     <div>&nbsp;${a}</div>
                     <div>+ ${b}</div>
                     <div class="border-b-2 border-slate-400 my-1"></div>
-                    <div>${cout}${sum}</div>
+                    <div>
+                        <span class="font-bold text-yellow-400">${cout}</span>
+                        <span class="font-bold text-green-400 ml-2">${sum}</span>
+                    </div>
                 </div>
-                <p class="mt-4 text-slate-400 max-w-xs mx-auto">The <span class="text-yellow-400 font-bold">Carry-Out</span> from this calculation becomes the <span class="text-yellow-400 font-bold">Carry-In</span> for the next column to the left.</p>
+                <p class="mt-4 text-slate-400 max-w-xs mx-auto">The <span class="text-yellow-400 font-bold">Carry-Out</span> (${cout}) becomes the <span class="text-yellow-400 font-bold">Carry-In</span> for the next column.</p>
             `;
         }
         
-        function updateTruthTable(currentA, currentB, currentCin) {
-            const container = document.getElementById('truth-table-container');
-            const combinations = [
-                {a:0,b:0,cin:0,cout:0,s:0}, {a:0,b:0,cin:1,cout:0,s:1},
-                {a:0,b:1,cin:0,cout:0,s:1}, {a:0,b:1,cin:1,cout:1,s:0},
-                {a:1,b:0,cin:0,cout:0,s:1}, {a:1,b:0,cin:1,cout:1,s:0},
-                {a:1,b:1,cin:0,cout:1,s:0}, {a:1,b:1,cin:1,cout:1,s:1},
-            ];
-            const rows = combinations.map(c => {
-                const isCurrent = (c.a === currentA && c.b === currentB && c.cin === currentCin);
-                return `<tr class="${isCurrent ? 'current' : ''}">
-                          <td>${c.cin}</td><td>${c.a}</td><td>${c.b}</td>
-                          <td class="font-bold text-green-400">${c.cout}</td>
-                          <td class="font-bold text-green-400">${c.s}</td>
-                        </tr>`;
-            }).join('');
-            container.innerHTML = `
-                <h3 class="text-xl font-bold text-white mb-2 text-center">Truth Table</h3>
-                <table class="truth-table mx-auto w-full">
-                    <thead><tr><th>C-in</th><th>A</th><th>B</th><th>C-out</th><th>Sum</th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>`;
-        }
-
         function powerElement(id, isPowered) {
             const el = document.getElementById(id);
             if (el) {
@@ -290,4 +264,3 @@
     </script>
 </body>
 </html>
-
