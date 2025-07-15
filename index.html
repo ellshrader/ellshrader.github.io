@@ -74,13 +74,10 @@
             const menu = document.getElementById('module-menu');
             const iframe = document.getElementById('game-frame');
 
-            // --- Check for local file access and show a warning if needed ---
             if (window.location.protocol === 'file:') {
                 document.getElementById('local-testing-note').classList.remove('hidden');
             }
 
-            // --- List of Your Game Modules ---
-            // The subfolder path has been removed, as the files are in the root directory.
             const gameModules = [
                 { name: "Adding Binary", url: "adding_binary.html" },
                 { name: "Transistor", url: "transistor.html" },
@@ -97,49 +94,39 @@
             ];
 
             // --- Dynamically Create Menu Buttons ---
-            gameModules.forEach(module => {
+            gameModules.forEach((module, index) => {
                 const listItem = document.createElement('li');
                 listItem.classList.add('flex-shrink-0', 'md:flex-shrink');
 
                 const link = document.createElement('a');
                 link.href = module.url;
                 link.textContent = module.name;
-                link.target = 'game-frame'; // This tells the link to open in our iframe
-                link.dataset.url = module.url; // Store url for click handling
+                link.target = 'game-frame'; // This is the crucial part that directs the link to the iframe
                 link.classList.add('module-link', 'block', 'py-2', 'px-4', 'my-1', 'rounded-md', 'transition-colors', 'duration-200', 'hover:bg-blue-600', 'hover:text-white', 'cursor-pointer');
                 
-                if (module.url.endsWith('#')) {
-                    link.classList.add('opacity-50', 'cursor-not-allowed');
+                // If it's the first link, load it and set it as active
+                if (index === 0 && window.location.protocol !== 'file:') {
+                    iframe.src = module.url;
+                    link.classList.add('active');
                 }
 
                 listItem.appendChild(link);
                 menu.appendChild(listItem);
             });
 
-            // --- Handle Menu Clicks and Active State ---
+            // --- Handle Clicks for STYLING ONLY ---
+            // The link's default behavior (loading into the iframe via the 'target' attribute) is now allowed to happen.
+            // This script now only worries about making the clicked link look "active".
             menu.addEventListener('click', function(e) {
                 if (e.target && e.target.matches('a.module-link')) {
-                    e.preventDefault(); // Prevent default link behavior
-                    const url = e.target.dataset.url;
-
-                    if (url.endsWith('#')) return;
-
-                    iframe.src = url;
-
+                    // Remove 'active' from all links
                     menu.querySelectorAll('.module-link').forEach(link => {
                         link.classList.remove('active');
                     });
+                    // Add 'active' to the clicked link
                     e.target.classList.add('active');
                 }
             });
-
-            // Set the first item as active by default
-            const firstLink = menu.querySelector('.module-link');
-            if (firstLink && !firstLink.dataset.url.endsWith('#')) {
-                if (window.location.protocol !== 'file:') {
-                    firstLink.click();
-                }
-            }
         });
     </script>
 </body>
