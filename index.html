@@ -8,8 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         /* Custom styles to match the aesthetic of your game modules */
+        body, html {
+            height: 100%; /* Ensure the body can be a full-height flex container */
+        }
         body {
             font-family: 'Inter', sans-serif;
+            overflow-y: auto; /* Allow the main body to scroll if content is very tall */
         }
         /* Custom scrollbar for a more integrated look */
         ::-webkit-scrollbar {
@@ -31,52 +35,38 @@
             color: #ffffff;
             font-weight: 600;
         }
-        iframe {
-            /* This ensures the iframe content is not blocked by the header/menu on small screens */
-            height: calc(100vh - 4rem); /* Full height minus header */
-        }
-        @media (min-width: 768px) {
-            iframe {
-                 height: 100vh; /* Full height on larger screens */
-            }
+        /* The iframe will now have its height set by JavaScript, so we remove fixed height styles */
+        #game-frame {
+            width: 100%;
+            border: 0;
+            transition: height 0.3s ease-in-out; /* Smooth transition when height changes */
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-200 flex flex-col">
+<body class="bg-gray-900 text-gray-200 flex flex-col md:flex-row">
 
-    <!-- A visible note for testing locally -->
-    <div id="local-testing-note" class="hidden p-3 bg-yellow-800 text-yellow-100 text-center font-semibold">
-        <strong>Note:</strong> If modules are not loading, it's likely because you are running this file directly from your computer. For security, browsers block this action. The page will work correctly when hosted on a web server (like GitHub Pages).
-    </div>
+    <!-- Sidebar Navigation -->
+    <nav class="w-full md:w-64 bg-gray-800 border-b md:border-b-0 md:border-r border-gray-700 flex-shrink-0">
+        <div class="p-4">
+            <h1 class="text-white text-2xl font-bold font-mono">Game Modules</h1>
+            <p class="text-sm text-gray-400 mt-1">Select a level to begin.</p>
+        </div>
+        <ul id="module-menu" class="flex flex-row md:flex-col overflow-x-auto md:overflow-x-hidden p-2">
+            <!-- Menu items will be dynamically inserted here by JavaScript -->
+        </ul>
+    </nav>
 
-    <div class="flex flex-col md:flex-row flex-1">
-        <!-- Sidebar Navigation -->
-        <nav class="w-full md:w-64 bg-gray-800 border-b md:border-b-0 md:border-r border-gray-700 flex-shrink-0">
-            <div class="p-4">
-                <h1 class="text-white text-2xl font-bold font-mono">Game Modules</h1>
-                <p class="text-sm text-gray-400 mt-1">Select a level to begin.</p>
-            </div>
-            <ul id="module-menu" class="flex flex-row md:flex-col overflow-x-auto md:overflow-x-hidden p-2">
-                <!-- Menu items will be dynamically inserted here by JavaScript -->
-            </ul>
-        </nav>
-
-        <!-- Main Content Area -->
-        <main class="flex-1 flex flex-col">
-            <iframe id="game-frame" name="game-frame" class="w-full h-full border-0" srcdoc="<body style='background-color:#111827; color: #d1d5db; display:flex; justify-content:center; align-items:center; height:100vh; font-family: Inter, sans-serif;'><div><h1 style='font-size: 2rem; font-weight: bold;'>Welcome to the Logic Gate Simulator!</h1><p style='text-align:center; margin-top: 1rem;'>Select a module from the menu to start.</p></div></body>">
-                Your browser does not support iframes.
-            </iframe>
-        </main>
-    </div>
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col overflow-y-auto">
+        <iframe id="game-frame" name="game-frame" srcdoc="<body style='background-color:#111827; color: #d1d5db; display:flex; justify-content:center; align-items:center; height:100vh; font-family: Inter, sans-serif;'><div><h1 style='font-size: 2rem; font-weight: bold;'>Welcome to the Logic Gate Simulator!</h1><p style='text-align:center; margin-top: 1rem;'>Select a module from the menu to start.</p></div></body>">
+            Your browser does not support iframes.
+        </iframe>
+    </main>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const menu = document.getElementById('module-menu');
             const iframe = document.getElementById('game-frame');
-
-            if (window.location.protocol === 'file:') {
-                document.getElementById('local-testing-note').classList.remove('hidden');
-            }
 
             const gameModules = [
                 { name: "Adding Binary", url: "adding_binary.html" },
@@ -93,6 +83,21 @@
                 { name: "4-bit Adder", url: "4-bit_adder.html" }
             ];
 
+            // --- NEW: Function to resize the iframe based on its content ---
+            function resizeIframe() {
+                // A small delay ensures all content has been rendered before we measure it
+                setTimeout(() => {
+                    // Get the height of the document inside the iframe
+                    const contentHeight = iframe.contentWindow.document.body.scrollHeight;
+                    // Set the iframe's height to match its content, with a minimum height
+                    iframe.style.height = Math.max(contentHeight, 600) + 'px';
+                }, 150);
+            }
+
+            // --- Attach the resize function to the iframe's load event ---
+            // This will run every time a new page is loaded into the iframe.
+            iframe.addEventListener('load', resizeIframe);
+
             // --- Dynamically Create Menu Buttons ---
             gameModules.forEach((module, index) => {
                 const listItem = document.createElement('li');
@@ -101,10 +106,9 @@
                 const link = document.createElement('a');
                 link.href = module.url;
                 link.textContent = module.name;
-                link.target = 'game-frame'; // This is the crucial part that directs the link to the iframe
+                link.target = 'game-frame';
                 link.classList.add('module-link', 'block', 'py-2', 'px-4', 'my-1', 'rounded-md', 'transition-colors', 'duration-200', 'hover:bg-blue-600', 'hover:text-white', 'cursor-pointer');
                 
-                // If it's the first link, load it and set it as active
                 if (index === 0 && window.location.protocol !== 'file:') {
                     iframe.src = module.url;
                     link.classList.add('active');
@@ -115,15 +119,11 @@
             });
 
             // --- Handle Clicks for STYLING ONLY ---
-            // The link's default behavior (loading into the iframe via the 'target' attribute) is now allowed to happen.
-            // This script now only worries about making the clicked link look "active".
             menu.addEventListener('click', function(e) {
                 if (e.target && e.target.matches('a.module-link')) {
-                    // Remove 'active' from all links
                     menu.querySelectorAll('.module-link').forEach(link => {
                         link.classList.remove('active');
                     });
-                    // Add 'active' to the clicked link
                     e.target.classList.add('active');
                 }
             });
