@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lesson: Text to Binary Encoder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+            color: #d1d5db; /* text-gray-300 */
+        }
+        .lesson-container {
+            max-width: 768px; /* md:max-w-3xl */
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #1f2937; /* bg-gray-800 */
+            border-radius: 0.75rem; /* rounded-xl */
+            border: 1px solid #4f46e5; /* border-indigo-600 */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .foreman-sprite {
+            width: 64px;
+            height: 64px;
+            margin-right: 1rem;
+            flex-shrink: 0;
+        }
+        #key-display {
+            width: 100px;
+            height: 100px;
+            font-size: 4rem; /* text-6xl */
+            font-family: 'Roboto Mono', monospace;
+        }
+        #binary-display {
+            font-size: 2.25rem; /* text-4xl */
+            letter-spacing: 2px;
+            font-family: 'Roboto Mono', monospace;
+        }
+        #message-input, #binary-output {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #374151; /* bg-gray-700 */
+            border: 2px solid #4f46e5; /* border-indigo-600 */
+            color: white;
+            border-radius: 0.5rem; /* rounded-lg */
+            padding: 0.75rem;
+            width: 100%;
+        }
+        #binary-output {
+            min-height: 120px;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600; /* font-semibold */
+            transition: background-color 0.2s;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* bg-indigo-600 */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* hover:bg-indigo-700 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="lesson-container">
+        <!-- Header -->
+        <div class="flex items-center mb-6">
+            <div id="foreman-svg-container"></div>
+            <div>
+                <h1 class="text-2xl font-bold text-indigo-400">Lesson: Encoding Text</h1>
+                <p class="text-gray-400">Learn how computers understand letters and words.</p>
+            </div>
+        </div>
+
+        <!-- Part 1: Character Explorer -->
+        <div id="part1">
+            <h2 class="text-xl font-semibold mb-2 text-purple-300">Part 1: The Alphabet in Binary</h2>
+            <p class="bg-gray-900 p-4 rounded-lg mb-6">
+                Every key you press on your keyboard sends a unique 8-bit binary code to the computer. This system is called ASCII. Click the box below and press any key to see its code.
+            </p>
+            <div id="explorer-box" tabindex="0" class="bg-black/50 p-6 rounded-lg flex flex-col md:flex-row justify-around items-center gap-6 cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400">
+                <div id="key-display" class="bg-gray-700 rounded-lg flex items-center justify-center text-gray-500">?</div>
+                <div id="binary-display" class="text-purple-400">00000000</div>
+            </div>
+            <div class="text-center mt-6">
+                <button id="show-part2-btn" class="btn btn-primary">Continue to Encoder</button>
+            </div>
+        </div>
+
+        <!-- Part 2: Message Encoder -->
+        <div id="part2" class="hidden">
+            <hr class="my-8 border-gray-600">
+            <h2 class="text-xl font-semibold mb-2 text-teal-300">Part 2: Encode Your Own Message</h2>
+             <p class="bg-gray-900 p-4 rounded-lg mb-6">
+                Now, let's string those codes together. When you type a word, the computer just sees a long sequence of 0s and 1s. Type a short message below and see what it looks like to a machine.
+            </p>
+            <div class="space-y-4">
+                <input id="message-input" type="text" placeholder="Type message here..." maxlength="20">
+                <div id="binary-output" class="text-teal-300"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Foreman SVG ---
+        const foremanSvg = `<svg class="foreman-sprite" viewBox="0 0 16 16"><path fill="#fde68a" d="M5,6h6v5H5V6z"/><path fill="#f97316" d="M4,4h8v2H4V4z"/><path fill="#15803d" d="M4,11h8v3H4V11z"/><path fill="#000" d="M6,7h1v1H6V7zm3,0h1v1H9V7z"/></svg>`;
+        document.getElementById('foreman-svg-container').innerHTML = foremanSvg;
+
+        // --- DOM Elements ---
+        const part1 = document.getElementById('part1');
+        const part2 = document.getElementById('part2');
+        const showPart2Btn = document.getElementById('show-part2-btn');
+        
+        // Part 1 Elements
+        const explorerBox = document.getElementById('explorer-box');
+        const keyDisplay = document.getElementById('key-display');
+        const binaryDisplay = document.getElementById('binary-display');
+        
+        // Part 2 Elements
+        const messageInput = document.getElementById('message-input');
+        const binaryOutput = document.getElementById('binary-output');
+
+        // --- Part 1 Logic: Character Explorer ---
+        explorerBox.addEventListener('keydown', (e) => {
+            // Prevent default browser actions for keys like spacebar
+            e.preventDefault();
+            
+            // We only want to show single, printable characters
+            if (e.key.length === 1) {
+                const char = e.key;
+                const charCode = char.charCodeAt(0);
+                const binaryCode = charCode.toString(2).padStart(8, '0');
+
+                keyDisplay.textContent = char;
+                keyDisplay.classList.remove('text-gray-500');
+                binaryDisplay.textContent = binaryCode;
+            }
+        });
+
+        // --- Part 2 Logic: Message Encoder ---
+        messageInput.addEventListener('input', () => {
+            const message = messageInput.value;
+            let binaryString = '';
+            
+            for (let i = 0; i < message.length; i++) {
+                const char = message[i];
+                const binaryCode = char.charCodeAt(0).toString(2).padStart(8, '0');
+                binaryString += binaryCode + ' '; // Add a space for readability
+            }
+
+            binaryOutput.textContent = binaryString.trim();
+        });
+
+        // --- Flow Control ---
+        showPart2Btn.addEventListener('click', () => {
+            part2.classList.remove('hidden');
+            showPart2Btn.classList.add('hidden'); // Hide the button after use
+            messageInput.focus();
+        });
+
+    </script>
+</body>
+</html>
+
